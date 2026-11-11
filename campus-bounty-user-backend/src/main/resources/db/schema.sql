@@ -1,0 +1,72 @@
+USE campus_bounty;
+
+CREATE TABLE IF NOT EXISTS t_user (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    username VARCHAR(40) NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    nickname VARCHAR(30) NULL,
+    avatar VARCHAR(200) NULL,
+    bio VARCHAR(200) NULL,
+    contact VARCHAR(60) NULL,
+    role VARCHAR(16) NOT NULL DEFAULT 'STUDENT',
+    status VARCHAR(16) NOT NULL DEFAULT 'ACTIVE',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    CONSTRAINT uk_user_username UNIQUE (username)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS wallet (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    user_id BIGINT NOT NULL,
+    balance DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+    frozen DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+    PRIMARY KEY (id),
+    CONSTRAINT uk_wallet_user_id UNIQUE (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS trade_post (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    publisher_id BIGINT NOT NULL,
+    type VARCHAR(16) NOT NULL DEFAULT 'BOUNTY',
+    title VARCHAR(80) NOT NULL,
+    description VARCHAR(1000) NOT NULL,
+    images VARCHAR(500) NULL,
+    price DECIMAL(10, 2) NOT NULL,
+    category VARCHAR(30) NOT NULL,
+    deadline DATETIME NOT NULL,
+    status VARCHAR(16) NOT NULL DEFAULT 'OPEN',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    INDEX idx_trade_post_publisher (publisher_id, id),
+    INDEX idx_trade_post_hall (status, type, category, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS trade_order (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    post_id BIGINT NOT NULL,
+    buyer_id BIGINT NOT NULL,
+    seller_id BIGINT NULL,
+    amount DECIMAL(10, 2) NOT NULL,
+    status VARCHAR(16) NOT NULL DEFAULT 'PENDING',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    INDEX idx_trade_order_post (post_id, status),
+    INDEX idx_trade_order_buyer (buyer_id, id),
+    INDEX idx_trade_order_seller (seller_id, id),
+    INDEX idx_trade_order_status (status, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS wallet_log (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    user_id BIGINT NOT NULL,
+    type VARCHAR(16) NOT NULL,
+    amount DECIMAL(10, 2) NOT NULL,
+    balance_after DECIMAL(10, 2) NOT NULL,
+    order_id BIGINT NULL,
+    remark VARCHAR(100) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    INDEX idx_wallet_log_user (user_id, id),
+    INDEX idx_wallet_log_order (order_id, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
