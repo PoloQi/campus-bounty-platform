@@ -45,7 +45,6 @@ public class TradePost {
     @Column(nullable = false, length = 30)
     private String category;
 
-    @Column(nullable = false)
     private LocalDateTime deadline;
 
     @Enumerated(EnumType.STRING)

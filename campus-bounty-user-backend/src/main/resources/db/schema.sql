@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS trade_post (
     images VARCHAR(500) NULL,
     price DECIMAL(10, 2) NOT NULL,
     category VARCHAR(30) NOT NULL,
-    deadline DATETIME NOT NULL,
+    deadline DATETIME NULL,
     status VARCHAR(16) NOT NULL DEFAULT 'OPEN',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
@@ -70,3 +70,5 @@ CREATE TABLE IF NOT EXISTS wallet_log (
     INDEX idx_wallet_log_user (user_id, id),
     INDEX idx_wallet_log_order (order_id, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+ALTER TABLE trade_post MODIFY deadline DATETIME NULL;

@@ -4,6 +4,7 @@ import com.campus.bounty.common.ApiResponse;
 import com.campus.bounty.config.CurrentUser;
 import com.campus.bounty.trade.dto.PostView;
 import com.campus.bounty.trade.dto.PublishReq;
+import com.campus.bounty.trade.dto.ServicePublishReq;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,6 +28,11 @@ public class TradeController {
     @PostMapping("/posts")
     public ApiResponse<Long> publish(@Valid @RequestBody PublishReq request) {
         return ApiResponse.ok(postService.publish(CurrentUser.id(), request).getId());
+    }
+
+    @PostMapping("/services")
+    public ApiResponse<Long> publishService(@Valid @RequestBody ServicePublishReq request) {
+        return ApiResponse.ok(postService.publishService(CurrentUser.id(), request).getId());
     }
 
     @GetMapping("/posts")
