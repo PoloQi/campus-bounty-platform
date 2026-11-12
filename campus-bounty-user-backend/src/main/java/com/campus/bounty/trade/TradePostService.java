@@ -64,7 +64,9 @@ public class TradePostService {
     public PostView detail(Long id) {
         TradePost post = postRepository.findById(id)
                 .orElseThrow(() -> new BizException("悬赏不存在"));
-        TradeOrder order = orderRepository.findByPostId(id).orElse(null);
+        TradeOrder order = post.getType() == PostType.BOUNTY
+                ? orderRepository.findByPostId(id).orElse(null)
+                : null;
         return new PostView(post, order);
     }
 

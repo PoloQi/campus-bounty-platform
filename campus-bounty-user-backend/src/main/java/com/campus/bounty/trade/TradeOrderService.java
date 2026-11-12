@@ -1,6 +1,7 @@
 package com.campus.bounty.trade;
 
 import com.campus.bounty.common.BizException;
+import com.campus.bounty.trade.dto.OrderDetailView;
 import com.campus.bounty.wallet.WalletService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -18,6 +19,43 @@ public class TradeOrderService {
     private TradeOrder locked(Long orderId) {
         return orderRepository.findByIdForUpdate(orderId)
                 .orElseThrow(() -> new BizException("订单不存在"));
+    }
+
+    @Transactional
+    public TradeOrder buy(Long postId, Long buyerId) {
+        TradePost post = postRepository.findById(postId)
+                .orElseThrow(() -> new BizException("服务不存在"));
+        if (post.getType() != PostType.SERVICE) {
+            throw new BizException("该帖子不是服务");
+        }
+        if (post.getStatus() != PostStatus.OPEN) {
+            throw new BizException("服务已下架");
+        }
+        if (buyerId.equals(post.getPublisherId())) {
+            throw new BizException("不能购买自己发布的服务");
+        }
+
+        TradeOrder order = new TradeOrder();
+        order.setPostId(postId);
+        order.setBuyerId(buyerId);
+        order.setSellerId(post.getPublisherId());
+        order.setAmount(post.getPrice());
+        order.setStatus(OrderStatus.IN_PROGRESS);
+        orderRepository.save(order);
+
+        walletService.freeze(buyerId, post.getPrice(), order.getId());
+        return order;
+    }
+
+    public OrderDetailView detailForParticipant(Long orderId, Long userId) {
+        TradeOrder order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new BizException("订单不存在"));
+        if (!userId.equals(order.getBuyerId()) && !userId.equals(order.getSellerId())) {
+            throw new BizException("你不是该订单参与方");
+        }
+        TradePost post = postRepository.findById(order.getPostId())
+                .orElseThrow(() -> new BizException("服务不存在"));
+        return new OrderDetailView(order, post);
     }
 
     @Transactional

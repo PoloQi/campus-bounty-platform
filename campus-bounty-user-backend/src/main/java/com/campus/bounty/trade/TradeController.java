@@ -2,6 +2,7 @@ package com.campus.bounty.trade;
 
 import com.campus.bounty.common.ApiResponse;
 import com.campus.bounty.config.CurrentUser;
+import com.campus.bounty.trade.dto.OrderDetailView;
 import com.campus.bounty.trade.dto.PostView;
 import com.campus.bounty.trade.dto.PublishReq;
 import com.campus.bounty.trade.dto.ServicePublishReq;
@@ -46,6 +47,16 @@ public class TradeController {
     @GetMapping("/posts/{id}")
     public ApiResponse<PostView> detail(@PathVariable Long id) {
         return ApiResponse.ok(postService.detail(id));
+    }
+
+    @PostMapping("/posts/{postId}/buy")
+    public ApiResponse<TradeOrder> buy(@PathVariable Long postId) {
+        return ApiResponse.ok(orderService.buy(postId, CurrentUser.id()));
+    }
+
+    @GetMapping("/orders/{id}")
+    public ApiResponse<OrderDetailView> orderDetail(@PathVariable Long id) {
+        return ApiResponse.ok(orderService.detailForParticipant(id, CurrentUser.id()));
     }
 
     @PostMapping("/orders/{id}/accept")
