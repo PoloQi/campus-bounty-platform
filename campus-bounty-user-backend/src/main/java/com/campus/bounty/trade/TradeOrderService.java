@@ -21,6 +21,13 @@ public class TradeOrderService {
                 .orElseThrow(() -> new BizException("订单不存在"));
     }
 
+    private void closePostIfBounty(TradePost post) {
+        if (post.getType() == PostType.BOUNTY) {
+            post.setStatus(PostStatus.CLOSED);
+            postRepository.save(post);
+        }
+    }
+
     @Transactional
     public TradeOrder buy(Long postId, Long buyerId) {
         TradePost post = postRepository.findById(postId)
@@ -109,8 +116,7 @@ public class TradeOrderService {
 
         TradePost post = postRepository.findById(order.getPostId())
                 .orElseThrow(() -> new BizException("悬赏不存在"));
-        post.setStatus(PostStatus.CLOSED);
-        postRepository.save(post);
+        closePostIfBounty(post);
         return order;
     }
 
@@ -130,8 +136,7 @@ public class TradeOrderService {
 
         TradePost post = postRepository.findById(order.getPostId())
                 .orElseThrow(() -> new BizException("悬赏不存在"));
-        post.setStatus(PostStatus.CLOSED);
-        postRepository.save(post);
+        closePostIfBounty(post);
         return order;
     }
 
