@@ -19,6 +19,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class PostService {
     private final PostRepository postRepository;
+    private final CommentRepository commentRepository;
     private final UserRepository userRepository;
 
     @Transactional
@@ -80,7 +81,7 @@ public class PostService {
                     author == null ? "" : author.getNickname(),
                     author == null ? "" : author.getAvatar(),
                     post.getContent(), post.getImages(), post.getTags(), post.getLikeCount(),
-                    post.getStatus(), post.getCreatedAt());
+                    commentRepository.countByPostId(post.getId()), post.getStatus(), post.getCreatedAt());
         }).toList();
     }
 }

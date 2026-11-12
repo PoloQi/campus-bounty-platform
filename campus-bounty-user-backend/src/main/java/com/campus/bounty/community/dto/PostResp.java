@@ -16,6 +16,7 @@ public class PostResp {
     private String images;
     private String tags;
     private Integer likeCount;
+    private Long commentCount;
     private String status;
     private LocalDateTime createdAt;
 }
