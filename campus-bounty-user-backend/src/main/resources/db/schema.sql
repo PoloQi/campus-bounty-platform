@@ -71,4 +71,19 @@ CREATE TABLE IF NOT EXISTS wallet_log (
     INDEX idx_wallet_log_order (order_id, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS t_post (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    author_id BIGINT NOT NULL,
+    content VARCHAR(2000) NOT NULL,
+    images VARCHAR(1000) NULL,
+    tags VARCHAR(200) NULL,
+    like_count INT NOT NULL DEFAULT 0,
+    status VARCHAR(16) NOT NULL DEFAULT 'VISIBLE',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    INDEX idx_post_status (status, id),
+    INDEX idx_post_status_tags (status, tags, id),
+    INDEX idx_post_author (author_id, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 ALTER TABLE trade_post MODIFY deadline DATETIME NULL;
