@@ -17,3 +17,5 @@ server:
 jwt:
   secret: campus-bounty-local-jwt-secret-2026-personal-development
   expire-minutes: 1440
+app:
+  upload-dir: uploads
