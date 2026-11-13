@@ -105,4 +105,15 @@ CREATE TABLE IF NOT EXISTS t_comment (
     INDEX idx_comment_post (post_id, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS t_message (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    from_id BIGINT NOT NULL,
+    to_id BIGINT NOT NULL,
+    content VARCHAR(1000) NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    INDEX idx_message_from_to (from_id, to_id, id),
+    INDEX idx_message_to_from (to_id, from_id, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 ALTER TABLE trade_post MODIFY deadline DATETIME NULL;
