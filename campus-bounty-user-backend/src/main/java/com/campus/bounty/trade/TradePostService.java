@@ -3,6 +3,7 @@ package com.campus.bounty.trade;
 import com.campus.bounty.common.BizException;
 import com.campus.bounty.trade.dto.PostView;
 import com.campus.bounty.trade.dto.PublishReq;
+import com.campus.bounty.trade.dto.ServicePublishReq;
 import com.campus.bounty.wallet.WalletService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -41,6 +42,20 @@ public class TradePostService {
         return post;
     }
 
+    @Transactional
+    public TradePost publishService(Long publisherId, ServicePublishReq request) {
+        TradePost post = new TradePost();
+        post.setPublisherId(publisherId);
+        post.setType(PostType.SERVICE);
+        post.setTitle(request.getTitle());
+        post.setDescription(request.getDescription());
+        post.setImages(request.getImages());
+        post.setPrice(request.getPrice());
+        post.setCategory(request.getCategory());
+        post.setStatus(PostStatus.OPEN);
+        return postRepository.save(post);
+    }
+
     public List<TradePost> hall(PostType type, String category, String keyword) {
         String normalizedKeyword = keyword == null || keyword.isBlank() ? null : keyword;
         return postRepository.search(type, category, normalizedKeyword);
@@ -49,7 +64,9 @@ public class TradePostService {
     public PostView detail(Long id) {
         TradePost post = postRepository.findById(id)
                 .orElseThrow(() -> new BizException("悬赏不存在"));
-        TradeOrder order = orderRepository.findByPostId(id).orElse(null);
+        TradeOrder order = post.getType() == PostType.BOUNTY
+                ? orderRepository.findByPostId(id).orElse(null)
+                : null;
         return new PostView(post, order);
     }
 

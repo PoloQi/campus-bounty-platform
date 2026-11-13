@@ -1,6 +1,8 @@
 package com.campus.bounty.trade;
 
 import com.campus.bounty.common.BizException;
+import com.campus.bounty.notification.NotificationService;
+import com.campus.bounty.trade.dto.OrderDetailView;
 import com.campus.bounty.wallet.WalletService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -14,10 +16,56 @@ public class TradeOrderService {
     private final TradeOrderRepository orderRepository;
     private final TradePostRepository postRepository;
     private final WalletService walletService;
+    private final NotificationService notificationService;
 
     private TradeOrder locked(Long orderId) {
         return orderRepository.findByIdForUpdate(orderId)
                 .orElseThrow(() -> new BizException("订单不存在"));
+    }
+
+    private void closePostIfBounty(TradePost post) {
+        if (post.getType() == PostType.BOUNTY) {
+            post.setStatus(PostStatus.CLOSED);
+            postRepository.save(post);
+        }
+    }
+
+    @Transactional
+    public TradeOrder buy(Long postId, Long buyerId) {
+        TradePost post = postRepository.findById(postId)
+                .orElseThrow(() -> new BizException("服务不存在"));
+        if (post.getType() != PostType.SERVICE) {
+            throw new BizException("该帖子不是服务");
+        }
+        if (post.getStatus() != PostStatus.OPEN) {
+            throw new BizException("服务已下架");
+        }
+        if (buyerId.equals(post.getPublisherId())) {
+            throw new BizException("不能购买自己发布的服务");
+        }
+
+        TradeOrder order = new TradeOrder();
+        order.setPostId(postId);
+        order.setBuyerId(buyerId);
+        order.setSellerId(post.getPublisherId());
+        order.setAmount(post.getPrice());
+        order.setStatus(OrderStatus.IN_PROGRESS);
+        orderRepository.save(order);
+
+        walletService.freeze(buyerId, post.getPrice(), order.getId());
+        notificationService.push(post.getPublisherId(), "ORDER_CREATED", "你的服务有新订单", order.getId());
+        return order;
+    }
+
+    public OrderDetailView detailForParticipant(Long orderId, Long userId) {
+        TradeOrder order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new BizException("订单不存在"));
+        if (!userId.equals(order.getBuyerId()) && !userId.equals(order.getSellerId())) {
+            throw new BizException("你不是该订单参与方");
+        }
+        TradePost post = postRepository.findById(order.getPostId())
+                .orElseThrow(() -> new BizException("服务不存在"));
+        return new OrderDetailView(order, post);
     }
 
     @Transactional
@@ -38,6 +86,7 @@ public class TradeOrderService {
                 .orElseThrow(() -> new BizException("悬赏不存在"));
         post.setStatus(PostStatus.LOCKED);
         postRepository.save(post);
+        notificationService.push(order.getBuyerId(), "ORDER_ACCEPTED", "你的悬赏已被接单", order.getId());
         return order;
     }
 
@@ -52,7 +101,9 @@ public class TradeOrderService {
         }
         order.setStatus(OrderStatus.CONFIRMING);
         order.setUpdatedAt(LocalDateTime.now());
-        return orderRepository.save(order);
+        TradeOrder saved = orderRepository.save(order);
+        notificationService.push(order.getBuyerId(), "ORDER_DELIVERED", "对方已交付，请确认", order.getId());
+        return saved;
     }
 
     @Transactional
@@ -71,8 +122,8 @@ public class TradeOrderService {
 
         TradePost post = postRepository.findById(order.getPostId())
                 .orElseThrow(() -> new BizException("悬赏不存在"));
-        post.setStatus(PostStatus.CLOSED);
-        postRepository.save(post);
+        closePostIfBounty(post);
+        notificationService.push(order.getSellerId(), "ORDER_COMPLETED", "订单已完成，赏金已到账", order.getId());
         return order;
     }
 
@@ -92,8 +143,10 @@ public class TradeOrderService {
 
         TradePost post = postRepository.findById(order.getPostId())
                 .orElseThrow(() -> new BizException("悬赏不存在"));
-        post.setStatus(PostStatus.CLOSED);
-        postRepository.save(post);
+        closePostIfBounty(post);
+        if (order.getSellerId() != null) {
+            notificationService.push(order.getSellerId(), "ORDER_CANCELLED", "订单已被取消", order.getId());
+        }
         return order;
     }
 
