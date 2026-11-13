@@ -2,9 +2,9 @@ spring:
   application:
     name: campus-bounty-backend
   datasource:
-    url: jdbc:mysql://mysql5.sqlpub.com:3310/campus_bounty?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
-    username: campus_user
-    password: X79YVPqWYPs4wNRW
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
   jpa:
     hibernate:
       ddl-auto: validate
@@ -15,7 +15,7 @@ spring:
 server:
   port: 8080
 jwt:
-  secret: campus-bounty-local-jwt-secret-2026-personal-development
+  secret: ${JWT_SECRET}
   expire-minutes: 1440
 app:
   upload-dir: uploads

@@ -82,6 +82,23 @@ class ChatWebSocketTest {
         assertThrows(CompletionException.class, () -> connect("invalid-token", new MessageListener()));
     }
 
+    @Test
+    void websocket_returns_business_error_without_closing_sender() throws Exception {
+        User sender = register("chat_ws_error_sender");
+        MessageListener senderListener = new MessageListener();
+        WebSocket senderSocket = connect(token(sender), senderListener);
+
+        try {
+            senderSocket.sendText("{\"toId\":99999999,\"content\":\"你好\"}", true).join();
+
+            JsonNode error = objectMapper.readTree(senderListener.nextText.get(5, TimeUnit.SECONDS));
+            assertEquals("接收用户不存在", error.get("error").asText());
+            assertFalse(senderSocket.isOutputClosed());
+        } finally {
+            senderSocket.sendClose(WebSocket.NORMAL_CLOSURE, "done").join();
+        }
+    }
+
     private WebSocket connect(String token, WebSocket.Listener listener) {
         return HttpClient.newHttpClient().newWebSocketBuilder()
                 .buildAsync(URI.create(wsUrl("/ws/chat?token=" + token)), listener).join();

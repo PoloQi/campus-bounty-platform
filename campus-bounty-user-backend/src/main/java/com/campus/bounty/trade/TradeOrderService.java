@@ -53,6 +53,7 @@ public class TradeOrderService {
         orderRepository.save(order);
 
         walletService.freeze(buyerId, post.getPrice(), order.getId());
+        notificationService.push(post.getPublisherId(), "ORDER_CREATED", "你的服务有新订单", order.getId());
         return order;
     }
 

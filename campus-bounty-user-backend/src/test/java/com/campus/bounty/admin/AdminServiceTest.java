@@ -22,6 +22,8 @@ import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRe
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Profile;
+import org.springframework.core.annotation.AnnotationUtils;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -35,7 +37,9 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -136,6 +140,14 @@ class AdminServiceTest {
         assertEquals(List.of("ROLE_STUDENT"), response.getBody().get("data"));
         assertEquals("ADMIN", admin().getRole());
         assertEquals(0, ((Number) loginAdmin().getBody().get("code")).intValue());
+    }
+
+    @Test
+    void demo_admin_is_only_created_for_local_and_test_profiles() {
+        Profile profile = AnnotationUtils.findAnnotation(AdminBootstrap.class, Profile.class);
+
+        assertNotNull(profile);
+        assertArrayEquals(new String[]{"local", "test"}, profile.value());
     }
 
     private User admin() {

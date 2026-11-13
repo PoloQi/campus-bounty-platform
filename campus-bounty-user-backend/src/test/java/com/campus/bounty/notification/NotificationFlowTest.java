@@ -9,6 +9,7 @@ import com.campus.bounty.trade.TradeOrderService;
 import com.campus.bounty.trade.TradePost;
 import com.campus.bounty.trade.TradePostService;
 import com.campus.bounty.trade.dto.PublishReq;
+import com.campus.bounty.trade.dto.ServicePublishReq;
 import com.campus.bounty.user.User;
 import com.campus.bounty.user.UserService;
 import com.campus.bounty.wallet.WalletService;
@@ -124,6 +125,26 @@ class NotificationFlowTest {
                 HttpMethod.POST, request, Map.class);
         assertEquals(0, ((Number) read.getBody().get("code")).intValue());
         assertTrue(notificationService.list(recipient.getId()).get(0).isRead());
+    }
+
+    @Test
+    void service_purchase_notifies_seller_with_order_reference() {
+        User seller = register("notify_service_seller");
+        User buyer = register("notify_service_buyer");
+        walletService.recharge(buyer.getId(), new BigDecimal("100.00"));
+        ServicePublishReq request = new ServicePublishReq();
+        request.setTitle("通知测试服务");
+        request.setDescription("下单后通知帖主");
+        request.setPrice(new BigDecimal("10.00"));
+        request.setCategory("学习");
+        TradePost service = postService.publishService(seller.getId(), request);
+
+        TradeOrder order = orderService.buy(service.getId(), buyer.getId());
+
+        List<Notification> notifications = notificationService.list(seller.getId());
+        assertEquals(1, notifications.size());
+        assertEquals("ORDER_CREATED", notifications.get(0).getType());
+        assertEquals(order.getId(), notifications.get(0).getRefId());
     }
 
     private TradeOrder newPendingOrder(User buyer) {

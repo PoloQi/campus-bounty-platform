@@ -6,11 +6,13 @@ import com.campus.bounty.wallet.Wallet;
 import com.campus.bounty.wallet.WalletRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.context.annotation.Profile;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 @Component
+@Profile({"local", "test"})
 @RequiredArgsConstructor
 public class AdminBootstrap implements CommandLineRunner {
     private final UserRepository userRepository;

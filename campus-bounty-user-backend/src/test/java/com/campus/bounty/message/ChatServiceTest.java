@@ -49,6 +49,24 @@ class ChatServiceTest {
         assertEquals(0, chatService.history(first.getId(), second.getId()).size());
     }
 
+    @Test
+    void message_to_missing_user_is_not_saved() {
+        User sender = register("chat_missing_sender");
+
+        assertThrows(BizException.class, () -> chatService.save(sender.getId(), 99999999L, "你好"));
+        assertEquals(0, chatService.history(sender.getId(), 99999999L).size());
+    }
+
+    @Test
+    void message_over_database_limit_is_rejected() {
+        User sender = register("chat_long_sender");
+        User receiver = register("chat_long_receiver");
+
+        assertThrows(BizException.class,
+                () -> chatService.save(sender.getId(), receiver.getId(), "x".repeat(1001)));
+        assertEquals(0, chatService.history(sender.getId(), receiver.getId()).size());
+    }
+
     private User register(String username) {
         return userService.register(username, "123456", "123456", "私信用户");
     }

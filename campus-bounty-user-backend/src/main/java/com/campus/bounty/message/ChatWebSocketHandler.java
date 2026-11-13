@@ -1,5 +1,6 @@
 package com.campus.bounty.message;
 
+import com.campus.bounty.common.BizException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
@@ -36,7 +37,16 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         Long fromId = userId(session);
         Long toId = body.get("toId").asLong();
         String content = body.get("content").asText();
-        Message saved = chatService.save(fromId, toId, content);
+        Message saved;
+        try {
+            saved = chatService.save(fromId, toId, content);
+        } catch (BizException e) {
+            String payload = objectMapper.writeValueAsString(Map.of("error", e.getMessage()));
+            synchronized (session) {
+                session.sendMessage(new TextMessage(payload));
+            }
+            return;
+        }
 
         WebSocketSession target = online.get(toId);
         if (target != null && target.isOpen()) {

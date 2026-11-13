@@ -8,3 +8,5 @@ spring:
     hibernate:
       ddl-auto: create-drop
     open-in-view: false
+jwt:
+  secret: test-only-jwt-secret-with-at-least-32-bytes
