@@ -140,4 +140,17 @@ CREATE TABLE IF NOT EXISTS t_review (
     INDEX idx_review_to_user (to_user_id, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS t_report (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    target_type VARCHAR(16) NOT NULL,
+    target_id BIGINT NOT NULL,
+    reporter_id BIGINT NOT NULL,
+    reason VARCHAR(200) NOT NULL,
+    status VARCHAR(16) NOT NULL DEFAULT 'PENDING',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    INDEX idx_report_status (status, id),
+    INDEX idx_report_target (target_type, target_id, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 ALTER TABLE trade_post MODIFY deadline DATETIME NULL;
