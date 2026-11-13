@@ -116,4 +116,16 @@ CREATE TABLE IF NOT EXISTS t_message (
     INDEX idx_message_to_from (to_id, from_id, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS t_notification (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    user_id BIGINT NOT NULL,
+    type VARCHAR(24) NOT NULL,
+    content VARCHAR(200) NOT NULL,
+    ref_id BIGINT NULL,
+    is_read BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    INDEX idx_notification_user (user_id, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 ALTER TABLE trade_post MODIFY deadline DATETIME NULL;
