@@ -25,6 +25,7 @@ import java.util.Map;
 public class TradeController {
     private final TradePostService postService;
     private final TradeOrderService orderService;
+    private final AppealService appealService;
 
     @PostMapping("/posts")
     public ApiResponse<Long> publish(@Valid @RequestBody PublishReq request) {
@@ -77,6 +78,21 @@ public class TradeController {
     @PostMapping("/orders/{id}/cancel")
     public ApiResponse<TradeOrder> cancel(@PathVariable Long id) {
         return ApiResponse.ok(orderService.cancel(id, CurrentUser.id()));
+    }
+
+    @PostMapping("/orders/{id}/appeal")
+    public ApiResponse<Appeal> appeal(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+        return ApiResponse.ok(appealService.open(id, CurrentUser.id(), String.valueOf(body.get("reason"))));
+    }
+
+    @PostMapping("/appeals/{id}/withdraw")
+    public ApiResponse<Appeal> withdrawAppeal(@PathVariable Long id) {
+        return ApiResponse.ok(appealService.withdraw(id, CurrentUser.id()));
+    }
+
+    @GetMapping("/orders/{id}/appeal")
+    public ApiResponse<Appeal> openAppeal(@PathVariable Long id) {
+        return ApiResponse.ok(appealService.viewOpen(id, CurrentUser.id()));
     }
 
     @GetMapping("/orders/mine")
