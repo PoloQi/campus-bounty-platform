@@ -1,9 +1,7 @@
 package com.campus.bounty.admin;
 
-import com.campus.bounty.admin.dto.ReportReq;
 import com.campus.bounty.common.ApiResponse;
 import com.campus.bounty.config.CurrentUser;
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -41,11 +39,5 @@ public class AdminController {
     @GetMapping("/reports")
     public ApiResponse<List<Report>> reports() {
         return ApiResponse.ok(adminService.pendingReports(CurrentUser.id()));
-    }
-
-    @PostMapping("/reports")
-    public ApiResponse<Void> report(@Valid @RequestBody ReportReq request) {
-        adminService.report(CurrentUser.id(), request.getTargetType(), request.getTargetId(), request.getReason());
-        return ApiResponse.ok();
     }
 }
