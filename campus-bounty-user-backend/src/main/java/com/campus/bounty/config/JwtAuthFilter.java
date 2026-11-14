@@ -32,7 +32,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             try {
                 Long userId = jwtUtil.parse(authorization.substring(7));
                 var user = userRepository.findById(userId).orElse(null);
-                if (user != null) {
+                if (user != null && !"BANNED".equals(user.getStatus())) {
                     var authentication = new UsernamePasswordAuthenticationToken(userId, null,
                             List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole())));
                     SecurityContextHolder.getContext().setAuthentication(authentication);

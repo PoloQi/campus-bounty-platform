@@ -27,6 +27,7 @@ import org.springframework.core.annotation.AnnotationUtils;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.context.ActiveProfiles;
@@ -118,13 +119,13 @@ class AdminServiceTest {
 
         ResponseEntity<Map> denied = rest.exchange(url("/api/admin/posts/" + post.getId() + "/delete"),
                 HttpMethod.POST, new HttpEntity<>(authHeaders(student)), Map.class);
-        assertEquals(40300, ((Number) denied.getBody().get("code")).intValue());
+        assertEquals(HttpStatus.FORBIDDEN, denied.getStatusCode());
 
         ResponseEntity<Map> deleted = rest.exchange(url("/api/admin/posts/" + post.getId() + "/delete"),
                 HttpMethod.POST, new HttpEntity<>(authHeaders(admin())), Map.class);
         assertEquals(0, ((Number) deleted.getBody().get("code")).intValue());
 
-        ResponseEntity<Map> reported = rest.postForEntity(url("/api/admin/reports"),
+        ResponseEntity<Map> reported = rest.postForEntity(url("/api/reports"),
                 new HttpEntity<>(Map.of("targetType", "POST", "targetId", post.getId(), "reason", "违规"),
                         authHeaders(student)), Map.class);
         assertEquals(0, ((Number) reported.getBody().get("code")).intValue());

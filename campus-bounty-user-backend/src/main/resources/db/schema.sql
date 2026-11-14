@@ -154,3 +154,20 @@ CREATE TABLE IF NOT EXISTS t_report (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 ALTER TABLE trade_post MODIFY deadline DATETIME NULL;
+
+CREATE TABLE IF NOT EXISTS t_appeal (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    order_id BIGINT NOT NULL,
+    appellant_id BIGINT NOT NULL,
+    reason VARCHAR(500) NOT NULL,
+    from_status VARCHAR(16) NOT NULL,
+    status VARCHAR(16) NOT NULL DEFAULT 'OPEN',
+    outcome VARCHAR(24) NULL,
+    admin_id BIGINT NULL,
+    admin_comment VARCHAR(500) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    handled_at DATETIME NULL,
+    PRIMARY KEY (id),
+    INDEX idx_appeal_order (order_id, status),
+    INDEX idx_appeal_status (status, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -59,6 +59,10 @@ public class AdminService {
 
     @Transactional
     public void report(Long reporterId, String targetType, Long targetId, String reason) {
+        if (reportRepository.existsByReporterIdAndTargetTypeAndTargetIdAndStatus(
+                reporterId, targetType, targetId, "PENDING")) {
+            throw new BizException("你已提交过对该对象的举报，正在处理中");
+        }
         Report report = new Report();
         report.setReporterId(reporterId);
         report.setTargetType(targetType);
