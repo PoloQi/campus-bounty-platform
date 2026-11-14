@@ -61,5 +61,30 @@ cd campus-bounty-user-backend && ./mvnw.cmd clean verify
 1. 本分支**不提供**仲裁 `release/refund`、举报处置 `handle`、审计日志、订单/资金/看板查询——由管理端在 `AppealService` / `AdminService` 上加法实现。
 2. `t_appeal` 仲裁字段已预留，管理端无需改表。
 3. `OrderDetailView` 结构未变；学生前端需单独调用 `GET /api/trade/orders/{id}/appeal` 渲染纠纷横幅与撤回按钮。
-4. 自动化测试基于 H2；真实 MySQL 联调前，数据库负责人需先执行 `schema.sql` 中新增的 `t_appeal` DDL（生产 `ddl-auto=validate`）。
+4. 自动化测试基于 H2；真实 MySQL 冒烟已于 2026-11-14 完成（见第六节）。
+
+## 六、真实 MySQL 冒烟（2026-11-14，已执行）
+
+启动方式：`./campus-bounty-user-backend/mvnw.cmd -f campus-bounty-user-backend/pom.xml spring-boot:run -Dspring-boot.run.profiles=local`。
+启动时 `ddl-auto=validate` 校验通过，确认共享库 `t_appeal` 与实体一致。
+
+| 步骤 | 实际结果 | 结论 |
+|---|---|---|
+| 学生 `GET /api/admin/reports` | HTTP 403，`code=40300 需要管理员权限` | ✅ |
+| `POST /api/reports` 首次 | `code=0` | ✅ |
+| 同对象重复举报 | `code=40000 你已提交过对该对象的举报，正在处理中` | ✅ |
+| A 发悬赏 B 接单 | `IN_PROGRESS` | ✅ |
+| B 发起申诉 | `appealId=1 fromStatus=IN_PROGRESS status=OPEN`，订单转 `DISPUTED` | ✅ |
+| DISPUTED 下 A 取消 | `code=40000 订单状态不允许取消` | ✅ |
+| DISPUTED 下 B 交付 | `code=40000 订单状态不允许此操作` | ✅ |
+| B 撤回申诉 | 订单恢复 `IN_PROGRESS`；A 收到 `APPEAL_CREATED`、`APPEAL_WITHDRAWN` 通知 | ✅ |
+| 撤回后 A 取消 | `code=0 status=CANCELLED`，钱包 `balance=100.00 frozen=0.00`（资金完整退回） | ✅ |
+| 封禁 B 后旧 token | HTTP 401 | ✅ |
+| 封禁 B 后重新登录 | `code=40000 账号已被封禁` | ✅ |
+| admin 访问管理接口 | HTTP 200 | ✅ |
+
+环境备注：
+- 启动曾因 `application.yml` 中 `allowPublicKeyRetrieval=tru` 笔误失败，已改为 `true`。
+- Git Bash 下 curl 请求体中的中文按 GBK 发送会导致后端 `Invalid UTF-8`（50000），冒烟脚本请求体一律使用 ASCII；这是脚本编码问题，不是后端缺陷。
+- 冒烟在共享库留下了测试数据：`smoke_a_*` / `smoke_b_*` 两个学生、1 笔已取消悬赏、1 条已撤回申诉、1 条 USER 举报；其中 `smoke_b_*` 仍处于 BANNED 状态，待管理端解封功能就绪后可恢复。
 5. 申诉/举报并发去重依赖订单行悲观锁（申诉）与服务层校验（举报）；课程规模不加数据库部分索引。
