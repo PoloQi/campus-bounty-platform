@@ -11,9 +11,9 @@
 | 权限收口 | `/api/admin/**` 统一 `hasRole("ADMIN")`；学生访问 403；`accessDeniedHandler` 区分 401/403 | 327040f |
 | 封禁拦截 | `JwtAuthFilter` 对 BANNED 用户不写 SecurityContext，旧 token 立即 401 | 327040f |
 | 举报迁移 | `POST /api/admin/reports` → `POST /api/reports`；同人同对象 PENDING 去重 | 327040f |
-| 申诉后端 | `t_appeal` 实体 + `AppealService.open/withdraw/viewOpen` + 3 个学生侧接口 | 待提交 |
-| DISPUTED 挂起 | 不改 `TradeOrderService`，靠既有状态白名单拒绝 accept/deliver/confirm/cancel | 待提交 |
-| 通知 | `APPEAL_CREATED` / `APPEAL_WITHDRAWN` 通知对方 | 待提交 |
+| 申诉后端 | `t_appeal` 实体 + `AppealService.open/withdraw/viewOpen` + 3 个学生侧接口 | 176ff71 |
+| DISPUTED 挂起 | 不改 `TradeOrderService`，靠既有状态白名单拒绝 accept/deliver/confirm/cancel | 176ff71 |
+| 通知 | `APPEAL_CREATED` / `APPEAL_WITHDRAWN` 通知对方 | 176ff71 |
 | 双端文档 | `用户端后端成果与双端对接说明.md` 追加 §9.3 Sprint 3 学生侧 | 3c62add |
 | 计划文档 | `docs/superpowers/plans/2026-11-14-sprint3-用户后端.md` | 327040f |
 
