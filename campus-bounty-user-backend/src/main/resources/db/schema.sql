@@ -171,3 +171,26 @@ CREATE TABLE IF NOT EXISTS t_appeal (
     INDEX idx_appeal_order (order_id, status),
     INDEX idx_appeal_status (status, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 管理端审计日志：只增不改不删，是举报处置与仲裁的前置依赖
+-- 索引按「adminId / action 筛选 + 时间区间 + 倒序」的实际查询形态设计
+CREATE TABLE IF NOT EXISTS t_admin_log (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    admin_id BIGINT NOT NULL,
+    action VARCHAR(24) NOT NULL,
+    target_type VARCHAR(24) NULL,
+    target_id BIGINT NULL,
+    detail VARCHAR(500) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    INDEX idx_admin_log_admin (admin_id, id),
+    INDEX idx_admin_log_action (action, id),
+    INDEX idx_admin_log_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 举报闭环字段：先加列后用（实体字段在管理端举报板块才补，Hibernate validate 不校验多余列）
+ALTER TABLE t_report
+    ADD COLUMN handler_id BIGINT NULL,
+    ADD COLUMN handled_at DATETIME NULL,
+    ADD COLUMN result VARCHAR(16) NULL,
+    ADD COLUMN handle_comment VARCHAR(500) NULL;

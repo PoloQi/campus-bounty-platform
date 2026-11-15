@@ -21,6 +21,7 @@ public class AdminService {
     private final PostRepository postRepository;
     private final TradePostRepository tradePostRepository;
     private final ReportRepository reportRepository;
+    private final AuditLogService auditLogService;
 
     public void requireAdmin(Long userId) {
         User user = userRepository.findById(userId)
@@ -37,6 +38,8 @@ public class AdminService {
                 .orElseThrow(() -> new BizException("帖子不存在"));
         post.setStatus("DELETED");
         postRepository.save(post);
+        auditLogService.record(adminId, AuditAction.DELETE_POST, "POST", postId,
+                "删除社区帖：authorId=" + post.getAuthorId());
     }
 
     @Transactional
@@ -46,6 +49,8 @@ public class AdminService {
                 .orElseThrow(() -> new BizException("交易帖不存在"));
         post.setStatus(PostStatus.CLOSED);
         tradePostRepository.save(post);
+        auditLogService.record(adminId, AuditAction.CLOSE_TRADE_POST, "TRADE_POST", postId,
+                "下架交易帖：" + post.getType() + " / " + post.getTitle());
     }
 
     @Transactional
@@ -55,6 +60,8 @@ public class AdminService {
                 .orElseThrow(() -> new BizException("用户不存在"));
         user.setStatus("BANNED");
         userRepository.save(user);
+        auditLogService.record(adminId, AuditAction.BAN_USER, "USER", userId,
+                "封禁用户：" + user.getUsername());
     }
 
     @Transactional
