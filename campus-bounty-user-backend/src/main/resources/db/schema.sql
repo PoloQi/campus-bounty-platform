@@ -147,6 +147,10 @@ CREATE TABLE IF NOT EXISTS t_report (
     reporter_id BIGINT NOT NULL,
     reason VARCHAR(200) NOT NULL,
     status VARCHAR(16) NOT NULL DEFAULT 'PENDING',
+    handler_id BIGINT NULL,
+    handled_at DATETIME NULL,
+    result VARCHAR(16) NULL,
+    handle_comment VARCHAR(500) NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     INDEX idx_report_status (status, id),
@@ -187,10 +191,3 @@ CREATE TABLE IF NOT EXISTS t_admin_log (
     INDEX idx_admin_log_action (action, id),
     INDEX idx_admin_log_created (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- 举报闭环字段：先加列后用（实体字段在管理端举报板块才补，Hibernate validate 不校验多余列）
-ALTER TABLE t_report
-    ADD COLUMN handler_id BIGINT NULL,
-    ADD COLUMN handled_at DATETIME NULL,
-    ADD COLUMN result VARCHAR(16) NULL,
-    ADD COLUMN handle_comment VARCHAR(500) NULL;

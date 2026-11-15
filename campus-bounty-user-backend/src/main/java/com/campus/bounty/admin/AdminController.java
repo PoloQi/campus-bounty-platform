@@ -3,14 +3,10 @@ package com.campus.bounty.admin;
 import com.campus.bounty.common.ApiResponse;
 import com.campus.bounty.config.CurrentUser;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/admin")
@@ -36,8 +32,6 @@ public class AdminController {
         return ApiResponse.ok();
     }
 
-    @GetMapping("/reports")
-    public ApiResponse<List<Report>> reports() {
-        return ApiResponse.ok(adminService.pendingReports(CurrentUser.id()));
-    }
+    // GET /api/admin/reports 已迁到 AdminReportController（B4 起支持 status/targetType 筛选），
+    // 路径与鉴权行为不变，避免两个控制器映射同一路径导致启动报 Ambiguous mapping。
 }

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-管理端接口一键验证脚本（B1 审计底座 + B2 订单只读）
+管理端接口一键验证脚本（B1 审计底座 + B2 订单只读 + B3 用户与资金 + B4 举报闭环）
 
 两种模式，用途不同，不要混用：
 
@@ -190,6 +190,28 @@ def run_readonly(api, args):
     check("不存在用户返回 40000", status == 200 and code_of(body) == 40000,
           "status=%s code=%s" % (status, code_of(body)))
 
+    print("\n[7] B4 举报接口（只读探针）")
+    status, body, _ = api.call("GET", "/api/admin/reports", token=token)
+    check("GET /api/admin/reports 200/code=0", status == 200 and code_of(body) == 0,
+          "status=%s rows=%s" % (status, len(data_of(body) or [])))
+
+    status, body, _ = api.call("GET", "/api/admin/reports?status=PENDING", token=token)
+    rows = data_of(body) or []
+    check("status=PENDING 筛选结果全为待处理",
+          all(row.get("status") == "PENDING" for row in rows), "rows=%d" % len(rows))
+
+    status, body, _ = api.call("GET", "/api/admin/reports?targetType=USER", token=token)
+    rows = data_of(body) or []
+    check("targetType 筛选结果类型一致",
+          all(row.get("targetType") == "USER" for row in rows), "rows=%d" % len(rows))
+
+    status, body, _ = api.call("GET", "/api/admin/reports")
+    check("无 token 访问举报列表 401", status == 401 and code_of(body) == 40100,
+          "status=%s code=%s" % (status, code_of(body)))
+
+    status, body, _ = api.call("POST", "/api/admin/reports/1/handle", {"action": "REJECT"})
+    check("无 token 调用处置接口 401", status == 401, "status=%s" % status)
+
 
 def run_full(api, args):
     """完整链路：会写入数据，仅对 H2 内存库使用。"""
@@ -373,6 +395,70 @@ def run_full(api, args):
     check("balanced 与 diff 一致",
           bool(summary.get("balanced")) == (float(summary.get("diff", 1)) == 0.0),
           "diff=%s balanced=%s" % (summary.get("diff"), summary.get("balanced")))
+
+    print("\n[9] B4 举报处置闭环")
+    status, body, _ = api.call("POST", "/api/reports", {
+        "targetType": "TRADE_POST", "targetId": post_id,
+        "reason": "冒烟举报：服务内容违规"}, stu_token)
+    check("学生提交举报", status == 200 and code_of(body) == 0)
+
+    status, body, _ = api.call("GET", "/api/admin/reports?status=PENDING&targetType=TRADE_POST",
+                               token=admin_token)
+    rows = data_of(body) or []
+    mine = [row for row in rows if long_of(row.get("targetId")) == long_of(post_id)]
+    check("待处理举报能查到", len(mine) == 1, "rows=%d" % len(rows))
+    report_id = mine[0].get("id") if mine else None
+
+    status, body, _ = api.call("GET", "/api/admin/reports", token=stu_token)
+    check("学生访问举报列表 403", status == 403, "status=%s" % status)
+
+    if report_id is None:
+        return
+
+    status, body, _ = api.call("POST", "/api/admin/reports/%s/handle" % report_id,
+                               {"action": "CLOSE_TRADE_POST", "comment": "冒烟处置：违规下架"},
+                               admin_token)
+    handled = data_of(body) or {}
+    check("处置成功回写 HANDLED/VALID",
+          handled.get("status") == "HANDLED" and handled.get("result") == "VALID",
+          "status=%s result=%s" % (handled.get("status"), handled.get("result")))
+    check("回写处置人与处置时间",
+          handled.get("handlerId") is not None and handled.get("handledAt") is not None,
+          "comment=%s" % handled.get("handleComment"))
+
+    status, body, _ = api.call("GET", "/api/trade/posts/%s" % post_id, token=stu_token)
+    post_status = ((data_of(body) or {}).get("post") or {}).get("status")
+    check("被举报交易帖已下架", post_status == "CLOSED", "postStatus=%s" % post_status)
+
+    status, body, _ = api.call("GET", "/api/admin/logs?action=HANDLE_REPORT", token=admin_token)
+    logs = data_of(body) or []
+    check("审计留有 HANDLE_REPORT 记录",
+          any(long_of(row.get("targetId")) == long_of(report_id) for row in logs),
+          "rows=%d" % len(logs))
+
+    status, body, _ = api.call("GET", "/api/admin/logs?action=CLOSE_TRADE_POST", token=admin_token)
+    closed_logs = data_of(body) or []
+    check("未复用旧下架方法（无第二条审计）",
+          all(long_of(row.get("targetId")) != long_of(post_id) for row in closed_logs),
+          "rows=%d" % len(closed_logs))
+
+    status, body, _ = api.call("GET", "/api/notify", token=stu_token)
+    notes = data_of(body) or []
+    hit = [row for row in notes
+           if row.get("type") == "REPORT_HANDLED" and long_of(row.get("refId")) == long_of(report_id)]
+    check("举报人收到 REPORT_HANDLED 通知", len(hit) == 1, "notes=%d" % len(notes))
+
+    status, body, _ = api.call("POST", "/api/admin/reports/%s/handle" % report_id,
+                               {"action": "REJECT"}, admin_token)
+    check("重复处置被拒", status == 200 and code_of(body) == 40000,
+          "code=%s" % code_of(body))
+
+    status, body, _ = api.call("GET", "/api/admin/reports?status=HANDLED", token=admin_token)
+    check("status=HANDLED 筛选命中",
+          any(long_of(row.get("id")) == long_of(report_id) for row in (data_of(body) or [])))
+    status, body, _ = api.call("GET", "/api/admin/reports?status=PENDING", token=admin_token)
+    check("status=PENDING 不再包含该举报",
+          all(long_of(row.get("id")) != long_of(report_id) for row in (data_of(body) or [])))
 
 
 def main():

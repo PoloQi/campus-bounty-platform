@@ -37,4 +37,18 @@ public class Report {
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
+
+    /** 处置人。列在 B1 已随 schema.sql 落入数据库，本板块只补实体字段。 */
+    @Column(name = "handler_id")
+    private Long handlerId;
+
+    @Column(name = "handled_at")
+    private LocalDateTime handledAt;
+
+    /** VALID 举报成立 / REJECTED 举报不成立；未处置时为 null。 */
+    @Column(length = 16)
+    private String result;
+
+    @Column(name = "handle_comment", length = 500)
+    private String handleComment;
 }
