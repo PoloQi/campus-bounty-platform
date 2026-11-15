@@ -87,6 +87,12 @@ def long_of(value):
     return int(value) if isinstance(value, (int, float)) else value
 
 
+def num_of(mapping, key, default=-1.0):
+    """安全取数值。不要写 `float(x.get(k) or -1)`：0.0 是 falsy，会被误判成取不到值。"""
+    value = (mapping or {}).get(key)
+    return default if value is None else float(value)
+
+
 def frozen_diff(api, token):
     status, body, _ = api.call("GET", "/api/admin/wallets/frozen-summary", token=token)
     return float((data_of(body) or {}).get("diff") or 0)
@@ -211,6 +217,25 @@ def run_readonly(api, args):
 
     status, body, _ = api.call("POST", "/api/admin/reports/1/handle", {"action": "REJECT"})
     check("无 token 调用处置接口 401", status == 401, "status=%s" % status)
+
+    print("\n[8] B6 申诉接口（只读探针）")
+    status, body, _ = api.call("GET", "/api/admin/appeals", token=token)
+    check("GET /api/admin/appeals 200/code=0", status == 200 and code_of(body) == 0,
+          "status=%s rows=%s" % (status, len(data_of(body) or [])))
+
+    status, body, _ = api.call("GET", "/api/admin/appeals?status=OPEN", token=token)
+    rows = data_of(body) or []
+    check("status=OPEN 筛选结果全为待裁决",
+          all(row.get("status") == "OPEN" for row in rows), "rows=%d" % len(rows))
+    check("OPEN 申诉排在列表最前",
+          not rows or rows[0].get("status") == "OPEN", "rows=%d" % len(rows))
+
+    status, body, _ = api.call("GET", "/api/admin/appeals/99999999", token=token)
+    check("不存在申诉返回 40000 而非 500",
+          status == 200 and code_of(body) == 40000, "code=%s" % code_of(body))
+
+    status, body, _ = api.call("GET", "/api/admin/appeals")
+    check("无 token 访问申诉列表 401", status == 401, "status=%s" % status)
 
 
 def run_full(api, args):
@@ -502,6 +527,107 @@ def run_full(api, args):
     status, body, _ = api.call("POST", "/api/admin/users/%s/unban" % ban_target_id, token=admin_token)
     check("重复解封幂等（不报错）", status == 200 and code_of(body) == 0,
           "code=%s" % code_of(body))
+
+    print("\n[11] B6 申诉仲裁（唯一动钱，复用 [4] 的订单）")
+    status, body, _ = api.call("POST", "/api/trade/orders/%s/appeal" % order_id,
+                               {"reason": "冒烟申诉：已完成跑腿，对方不确认"}, sel_token)
+    appeal = data_of(body) or {}
+    appeal_no = appeal.get("id")
+    check("卖家发起申诉", status == 200 and code_of(body) == 0, "appealId=%s" % appeal_no)
+    check("订单转入 DISPUTED", appeal.get("fromStatus") == "IN_PROGRESS",
+          "fromStatus=%s" % appeal.get("fromStatus"))
+    if appeal_no is None:
+        return
+
+    status, body, _ = api.call("GET", "/api/admin/appeals?status=OPEN", token=admin_token)
+    rows = data_of(body) or []
+    mine = [row for row in rows if long_of(row.get("id")) == long_of(appeal_no)]
+    check("待裁决申诉能查到", len(mine) == 1, "rows=%d" % len(rows))
+    check("列表带出订单金额与申诉人",
+          bool(mine) and num_of(mine[0], "orderAmount", 0) == 20.0
+          and mine[0].get("appellantName") is not None,
+          "amount=%s name=%s" % (mine[0].get("orderAmount") if mine else None,
+                                 mine[0].get("appellantName") if mine else None))
+
+    status, body, raw_appeal = api.call("GET", "/api/admin/appeals/%s" % appeal_no, token=admin_token)
+    detail = data_of(body) or {}
+    check("详情识别申诉方为 SELLER", detail.get("appellantRole") == "SELLER",
+          "role=%s" % detail.get("appellantRole"))
+    check("详情显示订单在纠纷中", (detail.get("order") or {}).get("status") == "DISPUTED",
+          "orderStatus=%s" % (detail.get("order") or {}).get("status"))
+    check("详情含该单冻结流水",
+          any(row.get("type") == "FREEZE" for row in (detail.get("walletLogs") or [])),
+          "logs=%d" % len(detail.get("walletLogs") or []))
+    check("申诉详情不含密码字段",
+          "passwordHash" not in raw_appeal and "password_hash" not in raw_appeal,
+          "rawLen=%d" % len(raw_appeal))
+
+    status, body, _ = api.call("GET", "/api/admin/appeals", token=stu_token)
+    check("学生访问申诉列表 403", status == 403, "status=%s" % status)
+
+    summary_before = data_of(api.call("GET", "/api/admin/wallets/frozen-summary",
+                                      token=admin_token)[1]) or {}
+    status, body, _ = api.call("POST", "/api/admin/appeals/%s/release" % appeal_no,
+                               {"comment": "冒烟裁决：核实已送达，判付"}, admin_token)
+    resolved = data_of(body) or {}
+    check("裁决回写 RESOLVED/RELEASE_TO_SELLER",
+          resolved.get("status") == "RESOLVED"
+          and resolved.get("outcome") == "RELEASE_TO_SELLER",
+          "status=%s outcome=%s" % (resolved.get("status"), resolved.get("outcome")))
+    check("裁决记录仲裁人与意见",
+          resolved.get("adminId") is not None and resolved.get("handledAt") is not None
+          and resolved.get("adminComment") is not None,
+          "comment=%s" % resolved.get("adminComment"))
+
+    status, body, _ = api.call("GET", "/api/trade/posts/%s" % post_id, token=pub_token)
+    check("订单终态 COMPLETED",
+          ((data_of(body) or {}).get("order") or {}).get("status") == "COMPLETED",
+          "orderStatus=%s" % ((data_of(body) or {}).get("order") or {}).get("status"))
+
+    status, body, _ = api.call("GET", "/api/wallet", token=sel_token)
+    seller_wallet = data_of(body) or {}
+    check("卖家收到全额赏金 20", num_of(seller_wallet, "balance") == 20.0,
+          "balance=%s" % seller_wallet.get("balance"))
+
+    status, body, _ = api.call("GET", "/api/wallet", token=pub_token)
+    buyer_wallet = data_of(body) or {}
+    check("买家冻结清零、余额保持 80",
+          num_of(buyer_wallet, "frozen") == 0.0 and num_of(buyer_wallet, "balance") == 80.0,
+          "balance=%s frozen=%s" % (buyer_wallet.get("balance"), buyer_wallet.get("frozen")))
+
+    summary_after = data_of(api.call("GET", "/api/admin/wallets/frozen-summary",
+                                     token=admin_token)[1]) or {}
+    drop = num_of(summary_before, "frozenTotal", 0) - num_of(summary_after, "frozenTotal", 0)
+    check("平台冻结总额随裁决下降 20", abs(drop - 20.0) < 0.001,
+          "%.2f -> %.2f" % (num_of(summary_before, "frozenTotal", 0),
+                            num_of(summary_after, "frozenTotal", 0)))
+
+    status, body, _ = api.call("GET", "/api/admin/logs?action=APPEAL_RELEASE", token=admin_token)
+    rows = data_of(body) or []
+    check("审计留有 APPEAL_RELEASE 记录",
+          any(long_of(row.get("targetId")) == long_of(appeal_no) for row in rows),
+          "rows=%d" % len(rows))
+
+    status, body, _ = api.call("GET", "/api/notify", token=sel_token)
+    notes = data_of(body) or []
+    check("卖家收到 APPEAL_RESOLVED 通知",
+          any(row.get("type") == "APPEAL_RESOLVED" and long_of(row.get("refId")) == long_of(order_id)
+              for row in notes), "notes=%d" % len(notes))
+    status, body, _ = api.call("GET", "/api/notify", token=pub_token)
+    notes = data_of(body) or []
+    check("买家收到 APPEAL_RESOLVED 通知",
+          any(row.get("type") == "APPEAL_RESOLVED" and long_of(row.get("refId")) == long_of(order_id)
+              for row in notes), "notes=%d" % len(notes))
+
+    status, body, _ = api.call("POST", "/api/admin/appeals/%s/release" % appeal_no,
+                               {"comment": "重复裁决"}, admin_token)
+    check("重复裁决被拒（钱只动一次）", status == 200 and code_of(body) == 40000,
+          "code=%s" % code_of(body))
+
+    status, body, _ = api.call("GET", "/api/wallet", token=sel_token)
+    check("重复裁决后卖家余额仍为 20",
+          num_of(data_of(body) or {}, "balance") == 20.0,
+          "balance=%s" % (data_of(body) or {}).get("balance"))
 
 
 def main():
