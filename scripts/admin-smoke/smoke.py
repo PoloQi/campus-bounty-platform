@@ -460,6 +460,49 @@ def run_full(api, args):
     check("status=PENDING 不再包含该举报",
           all(long_of(row.get("id")) != long_of(report_id) for row in (data_of(body) or [])))
 
+    print("\n[10] B5 用户治理：解封（接 [7] 的封禁闭环）")
+    status, body, _ = api.call("POST", "/api/auth/login",
+                               {"username": names["ban"], "password": "123456"})
+    check("封禁期间登录被拒", code_of(body) == 40000, "code=%s" % code_of(body))
+    check("拒绝原因指向封禁", "封禁" in ((body or {}).get("message") or ""),
+          "message=%s" % (body or {}).get("message"))
+
+    status, body, _ = api.call("POST", "/api/admin/users/%s/unban" % ban_target_id, token=stu_token)
+    check("学生调用解封 403", status == 403, "status=%s" % status)
+
+    status, body, _ = api.call("POST", "/api/admin/users/99999999/unban", token=admin_token)
+    check("解封不存在用户 40000 而非 500",
+          status == 200 and code_of(body) == 40000, "code=%s" % code_of(body))
+
+    status, body, _ = api.call("POST", "/api/admin/users/%s/unban" % ban_target_id, token=admin_token)
+    check("管理员解封成功", status == 200 and code_of(body) == 0, "code=%s" % code_of(body))
+
+    status, body, _ = api.call("GET", "/api/admin/users?keyword=%s" % names["ban"], token=admin_token)
+    rows = [u for u in (data_of(body) or []) if u.get("username") == names["ban"]]
+    check("用户状态回到 ACTIVE",
+          len(rows) == 1 and rows[0].get("status") == "ACTIVE",
+          "status=%s" % (rows[0].get("status") if rows else None))
+
+    new_token, new_profile = login(api, names["ban"], "123456")
+    check("解封后可重新登录", new_token is not None,
+          "userId=%s" % (new_profile or {}).get("userId"))
+    check("重新登录拿到的是同一账号",
+          long_of((new_profile or {}).get("userId")) == long_of(ban_target_id),
+          "%s vs %s" % ((new_profile or {}).get("userId"), ban_target_id))
+
+    status, body, _ = api.call("GET", "/api/wallet", token=ban_token)
+    check("解封后旧 token 恢复可用（未做 token 吊销）", status == 200, "status=%s" % status)
+
+    status, body, _ = api.call("GET", "/api/admin/logs?action=UNBAN_USER", token=admin_token)
+    rows = data_of(body) or []
+    check("审计留有 UNBAN_USER 记录",
+          any(long_of(row.get("targetId")) == long_of(ban_target_id) for row in rows),
+          "rows=%d" % len(rows))
+
+    status, body, _ = api.call("POST", "/api/admin/users/%s/unban" % ban_target_id, token=admin_token)
+    check("重复解封幂等（不报错）", status == 200 and code_of(body) == 0,
+          "code=%s" % code_of(body))
+
 
 def main():
     parser = argparse.ArgumentParser(description="管理端接口一键验证")

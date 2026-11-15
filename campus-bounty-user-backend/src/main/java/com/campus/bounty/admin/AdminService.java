@@ -64,6 +64,22 @@ public class AdminService {
                 "封禁用户：" + user.getUsername());
     }
 
+    /**
+     * 解封：与 {@link #banUser} 完全对称。
+     * 幂等 —— 用户已是 ACTIVE 时不报错，只把状态写回 ACTIVE 并照样留痕：
+     * 管理员确实点了这一次，审计要能追溯，不能因为「没变化」就静默丢弃。
+     */
+    @Transactional
+    public void unbanUser(Long adminId, Long userId) {
+        requireAdmin(adminId);
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BizException("用户不存在"));
+        user.setStatus("ACTIVE");
+        userRepository.save(user);
+        auditLogService.record(adminId, AuditAction.UNBAN_USER, "USER", userId,
+                "解封用户：" + user.getUsername());
+    }
+
     @Transactional
     public void report(Long reporterId, String targetType, Long targetId, String reason) {
         if (reportRepository.existsByReporterIdAndTargetTypeAndTargetIdAndStatus(

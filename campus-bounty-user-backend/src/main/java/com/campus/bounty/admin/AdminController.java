@@ -32,6 +32,12 @@ public class AdminController {
         return ApiResponse.ok();
     }
 
+    @PostMapping("/users/{id}/unban")
+    public ApiResponse<Void> unban(@PathVariable Long id) {
+        adminService.unbanUser(CurrentUser.id(), id);
+        return ApiResponse.ok();
+    }
+
     // GET /api/admin/reports 已迁到 AdminReportController（B4 起支持 status/targetType 筛选），
     // 路径与鉴权行为不变，避免两个控制器映射同一路径导致启动报 Ambiguous mapping。
 }
