@@ -19,4 +19,7 @@ public interface AppealRepository extends JpaRepository<Appeal, Long> {
     @Query("select a from Appeal a where (:status is null or a.status = :status) "
             + "order by case when a.status = 'OPEN' then 0 else 1 end, a.id desc")
     List<Appeal> searchForAdmin(@Param("status") String status);
+
+    /** 看板待办数：OPEN 申诉条数。 */
+    long countByStatus(String status);
 }

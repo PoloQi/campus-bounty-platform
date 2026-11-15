@@ -21,4 +21,7 @@ public interface ReportRepository extends JpaRepository<Report, Long> {
             + "and (:targetType is null or r.targetType = :targetType) "
             + "order by r.id desc")
     List<Report> searchForAdmin(@Param("status") String status, @Param("targetType") String targetType);
+
+    /** 看板待办数：PENDING 举报条数。 */
+    long countByStatus(String status);
 }

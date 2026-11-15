@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-管理端接口一键验证脚本（B1 审计底座 + B2 订单只读 + B3 用户与资金 + B4 举报闭环）
+管理端接口一键验证脚本（B1 审计底座 + B2 订单只读 + B3 用户与资金 + B4 举报闭环
++ B5 封禁解封 + B6 申诉仲裁 + B7 数据看板）
 
 两种模式，用途不同，不要混用：
 
@@ -26,6 +27,7 @@
 退出码：0 全部通过；1 有失败项。
 """
 import argparse
+import datetime
 import json
 import sys
 import time
@@ -236,6 +238,30 @@ def run_readonly(api, args):
 
     status, body, _ = api.call("GET", "/api/admin/appeals")
     check("无 token 访问申诉列表 401", status == 401, "status=%s" % status)
+
+    print("\n[9] B7 数据看板（只读探针）")
+    status, body, raw_dash = api.call("GET", "/api/admin/dashboard", token=token)
+    check("GET /api/admin/dashboard 200/code=0", status == 200 and code_of(body) == 0,
+          "status=%s" % status)
+    dash = data_of(body) or {}
+    required = ("userTotal", "orderTotal", "orderCompleted", "gmv", "frozenTotal",
+                "pendingReportCount", "openAppealCount", "statusDistribution", "trend")
+    check("看板九个字段齐全", all(key in dash for key in required),
+          "missing=%s" % [key for key in required if key not in dash])
+    check("状态分布为 6 项", len(dash.get("statusDistribution") or []) == 6,
+          "size=%s" % len(dash.get("statusDistribution") or []))
+    check("趋势为 7 项", len(dash.get("trend") or []) == 7,
+          "size=%s" % len(dash.get("trend") or []))
+    # 真库数据随时在变，只断言「自洽」不断言具体数值
+    dist_sum = sum(long_of(row.get("count")) for row in (dash.get("statusDistribution") or []))
+    check("分布求和等于订单总数", dist_sum == long_of(dash.get("orderTotal")),
+          "sum=%s total=%s" % (dist_sum, dash.get("orderTotal")))
+    check("看板响应不含密码字段",
+          "passwordHash" not in raw_dash and "password_hash" not in raw_dash,
+          "rawLen=%d" % len(raw_dash))
+
+    status, body, _ = api.call("GET", "/api/admin/dashboard")
+    check("无 token 访问看板 401", status == 401, "status=%s" % status)
 
 
 def run_full(api, args):
@@ -628,6 +654,71 @@ def run_full(api, args):
     check("重复裁决后卖家余额仍为 20",
           num_of(data_of(body) or {}, "balance") == 20.0,
           "balance=%s" % (data_of(body) or {}).get("balance"))
+
+    print("\n[12] B7 数据看板（汇总前 11 步产生的全部数据）")
+    status, body, raw_dash = api.call("GET", "/api/admin/dashboard", token=admin_token)
+    dash = data_of(body) or {}
+    check("GET /api/admin/dashboard 200/code=0", status == 200 and code_of(body) == 0,
+          "status=%s code=%s" % (status, code_of(body)))
+    required = ("userTotal", "orderTotal", "orderCompleted", "gmv", "frozenTotal",
+                "pendingReportCount", "openAppealCount", "statusDistribution", "trend")
+    check("看板九个字段齐全", all(key in dash for key in required),
+          "missing=%s" % [key for key in required if key not in dash])
+
+    dist = dash.get("statusDistribution") or []
+    check("状态分布 6 项齐全", len(dist) == 6,
+          "keys=%s" % [row.get("status") for row in dist])
+    dist_sum = sum(long_of(row.get("count")) for row in dist)
+    check("分布求和等于订单总数（同一快照）", dist_sum == long_of(dash.get("orderTotal")),
+          "sum=%s total=%s" % (dist_sum, dash.get("orderTotal")))
+    completed_in_dist = next((long_of(row.get("count")) for row in dist
+                             if row.get("status") == "COMPLETED"), None)
+    check("已完成数与分布中的 COMPLETED 一致",
+          completed_in_dist == long_of(dash.get("orderCompleted")),
+          "dist=%s field=%s" % (completed_in_dist, dash.get("orderCompleted")))
+    check("GMV 覆盖前 11 步的成功订单", num_of(dash, "gmv") >= 20.0,
+          "gmv=%s" % dash.get("gmv"))
+
+    trend = dash.get("trend") or []
+    check("趋势固定 7 项", len(trend) == 7, "size=%d" % len(trend))
+    dates = [row.get("date") for row in trend]
+    check("趋势最后一项是今天", bool(dates) and dates[-1] == datetime.date.today().isoformat(),
+          "last=%s today=%s" % (dates[-1] if dates else None,
+                                datetime.date.today().isoformat()))
+    check("趋势日期连续升序",
+          all((datetime.date.fromisoformat(dates[i + 1])
+               - datetime.date.fromisoformat(dates[i])).days == 1
+              for i in range(len(dates) - 1)),
+          "dates=%s" % dates)
+    check("今天的趋势包含本轮的建单与完成",
+          num_of(trend[-1], "created", 0) >= 1 and num_of(trend[-1], "completed", 0) >= 1,
+          "created=%s completed=%s" % (num_of(trend[-1], "created", 0),
+                                       num_of(trend[-1], "completed", 0)))
+
+    status, body, _ = api.call("GET", "/api/admin/reports?status=PENDING", token=admin_token)
+    pending_rows = data_of(body) or []
+    check("待办举报数与列表接口条数一致",
+          long_of(dash.get("pendingReportCount")) == len(pending_rows),
+          "dashboard=%s list=%d" % (dash.get("pendingReportCount"), len(pending_rows)))
+
+    status, body, _ = api.call("GET", "/api/admin/appeals?status=OPEN", token=admin_token)
+    open_rows = data_of(body) or []
+    check("待办申诉数与列表接口条数一致",
+          long_of(dash.get("openAppealCount")) == len(open_rows),
+          "dashboard=%s list=%d" % (dash.get("openAppealCount"), len(open_rows)))
+
+    summary = data_of(api.call("GET", "/api/admin/wallets/frozen-summary",
+                               token=admin_token)[1]) or {}
+    check("看板冻结总额与冻结核对页一致",
+          abs(num_of(dash, "frozenTotal", 0) - num_of(summary, "frozenTotal", 0)) < 0.001,
+          "dashboard=%s summary=%s" % (num_of(dash, "frozenTotal", 0),
+                                       num_of(summary, "frozenTotal", 0)))
+
+    status, body, _ = api.call("GET", "/api/admin/dashboard", token=stu_token)
+    check("学生访问看板 403", status == 403, "status=%s" % status)
+    check("看板响应不含密码字段",
+          "passwordHash" not in raw_dash and "password_hash" not in raw_dash,
+          "rawLen=%d" % len(raw_dash))
 
 
 def main():

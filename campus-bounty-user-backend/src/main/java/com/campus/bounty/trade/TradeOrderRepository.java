@@ -51,4 +51,46 @@ public interface TradeOrderRepository extends JpaRepository<TradeOrder, Long> {
 
     @Query("select count(o) from TradeOrder o where o.status in :statuses")
     long countByStatusIn(@Param("statuses") Collection<OrderStatus> statuses);
+
+    // ---------- B7 数据看板 ----------
+
+    long countByStatus(OrderStatus status);
+
+    /**
+     * 看板：按状态分组计数，返回 [status, count]。
+     * 一次查询拿到全部分组，比 6 次 countByStatus 少 5 次往返；
+     * 库里没有的状态不会出现在结果里，补零是 Service 的责任（保证 6 态齐全）。
+     */
+    @Query("select o.status, count(o) from TradeOrder o group by o.status")
+    List<Object[]> countGroupByStatus();
+
+    /**
+     * 看板：按自然日统计新建订单数，返回 [year, month, day, count]。
+     * <p>
+     * 用 {@code extract(...)} 而不是 {@code function('date', ...)} 或 {@code date(...)}：
+     * extract 是 JPQL 标准语法，H2 与 MySQL 都能翻译，不必为测试库和生产库写两套。
+     * 只返回「有数据的天」，缺的日期由 Service 补 0。
+     */
+    @Query("select extract(year from o.createdAt), extract(month from o.createdAt), "
+            + "extract(day from o.createdAt), count(o) from TradeOrder o "
+            + "where o.createdAt >= :from "
+            + "group by extract(year from o.createdAt), extract(month from o.createdAt), "
+            + "extract(day from o.createdAt)")
+    List<Object[]> countCreatedByDay(@Param("from") LocalDateTime from);
+
+    /**
+     * 看板：按自然日统计完成订单数，返回 [year, month, day, count]。
+     * <p>
+     * <b>重要口径</b>：trade_order 没有 completed_at 列（不在本批次改库范围内），
+     * 完成里程碑只能借用 updated_at。这是已知的近似：已完成订单若日后被再次改动，
+     * 会被算进改动那天。当前代码路径下 COMPLETED 是终态、不会再被写，
+     * 所以现阶段两者等价——将来若给已完成订单加了可编辑属性，这里必须同步改口径。
+     */
+    @Query("select extract(year from o.updatedAt), extract(month from o.updatedAt), "
+            + "extract(day from o.updatedAt), count(o) from TradeOrder o "
+            + "where o.status = :status and o.updatedAt >= :from "
+            + "group by extract(year from o.updatedAt), extract(month from o.updatedAt), "
+            + "extract(day from o.updatedAt)")
+    List<Object[]> countUpdatedByDay(@Param("status") OrderStatus status,
+                                     @Param("from") LocalDateTime from);
 }
