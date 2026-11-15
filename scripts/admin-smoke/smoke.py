@@ -87,6 +87,11 @@ def long_of(value):
     return int(value) if isinstance(value, (int, float)) else value
 
 
+def frozen_diff(api, token):
+    status, body, _ = api.call("GET", "/api/admin/wallets/frozen-summary", token=token)
+    return float((data_of(body) or {}).get("diff") or 0)
+
+
 def register(api, username, nickname):
     api.call("POST", "/api/auth/register", {
         "username": username, "password": "123456",
@@ -155,6 +160,36 @@ def run_readonly(api, args):
     check("详情原文不含 passwordHash",
           "passwordHash" not in raw and "password_hash" not in raw, "rawLen=%d" % len(raw))
 
+    print("\n[6] B3 用户与资金只读")
+    status, body, raw_users = api.call("GET", "/api/admin/users", token=token)
+    check("GET /api/admin/users 200/code=0", status == 200 and code_of(body) == 0,
+          "status=%s rows=%s" % (status, len(data_of(body) or [])))
+    check("用户列表不含密码字段",
+          "passwordHash" not in raw_users and "password_hash" not in raw_users,
+          "rawLen=%d" % len(raw_users))
+
+    status, body, _ = api.call("GET", "/api/admin/users?role=ADMIN", token=token)
+    admins = data_of(body) or []
+    check("role=ADMIN 筛选结果全为管理员",
+          all(row.get("role") == "ADMIN" for row in admins), "rows=%d" % len(admins))
+
+    status, body, _ = api.call("GET", "/api/admin/wallet-logs?type=RECHARGE", token=token)
+    recharges = data_of(body) or []
+    check("全平台流水按 type 筛选",
+          all(row.get("type") == "RECHARGE" for row in recharges), "rows=%d" % len(recharges))
+
+    status, body, _ = api.call("GET", "/api/admin/wallets/frozen-summary", token=token)
+    summary = data_of(body) or {}
+    check("冻结核对字段齐全",
+          all(key in summary for key in
+              ("frozenTotal", "inFlightAmount", "diff", "balanced", "inFlightOrderCount")),
+          "frozen=%s inFlight=%s diff=%s" % (
+              summary.get("frozenTotal"), summary.get("inFlightAmount"), summary.get("diff")))
+
+    status, body, _ = api.call("GET", "/api/admin/users/99999999/wallet", token=token)
+    check("不存在用户返回 40000", status == 200 and code_of(body) == 40000,
+          "status=%s code=%s" % (status, code_of(body)))
+
 
 def run_full(api, args):
     """完整链路：会写入数据，仅对 H2 内存库使用。"""
@@ -177,10 +212,11 @@ def run_full(api, args):
     for key, nickname in (("pub", "验证发布者"), ("sel", "验证接单者"),
                           ("stu", "验证学生"), ("ban", "验证被禁者")):
         register(api, names[key], nickname)
-    pub_token, _ = login(api, names["pub"], "123456")
+    pub_token, pub_profile = login(api, names["pub"], "123456")
     sel_token, _ = login(api, names["sel"], "123456")
     stu_token, _ = login(api, names["stu"], "123456")
     ban_token, ban_profile = login(api, names["ban"], "123456")
+    pub_id = (pub_profile or {}).get("userId")
     check("四名用户均可登录",
           all([pub_token, sel_token, stu_token, ban_token]), "pub/sel/stu/ban")
 
@@ -194,6 +230,7 @@ def run_full(api, args):
     check("学生访问订单详情 403", status == 403, "status=%s" % status)
 
     print("\n[4] 真实业务链路：充值 -> 发悬赏 -> 接单")
+    diff_before = frozen_diff(api, admin_token)
     status, body, _ = api.call("POST", "/api/wallet/recharge", {"amount": 100}, pub_token)
     check("发布者充值 100", status == 200 and code_of(body) == 0)
     status, body, _ = api.call("GET", "/api/wallet", token=pub_token)
@@ -227,6 +264,10 @@ def run_full(api, args):
     check("他人接单转 IN_PROGRESS",
           status == 200 and (data_of(body) or {}).get("status") == "IN_PROGRESS",
           "status=%s" % (data_of(body) or {}).get("status"))
+
+    diff_after = frozen_diff(api, admin_token)
+    check("发单到接单全程冻结差额守恒", abs(diff_after - diff_before) < 0.001,
+          "diff %.2f -> %.2f" % (diff_before, diff_after))
 
     print("\n[5] B2 列表筛选")
     status, body, _ = api.call("GET",
@@ -285,6 +326,53 @@ def run_full(api, args):
 
     status, body, _ = api.call("GET", "/api/wallet", token=ban_token)
     check("封禁后旧 token 立即 401", status == 401, "status=%s" % status)
+
+    print("\n[8] B3 用户与资金监管")
+    status, body, raw_users = api.call("GET", "/api/admin/users?keyword=%s" % names["pub"],
+                                       token=admin_token)
+    users = data_of(body) or []
+    check("用户列表 keyword 命中", any(u.get("username") == names["pub"] for u in users),
+          "rows=%d" % len(users))
+    check("用户列表不含密码字段",
+          "passwordHash" not in raw_users and "password_hash" not in raw_users,
+          "rawLen=%d" % len(raw_users))
+
+    status, body, _ = api.call("GET", "/api/admin/users/%s/wallet" % pub_id, token=admin_token)
+    wallet = data_of(body) or {}
+    check("单用户钱包余额 80 冻结 20",
+          float(wallet.get("balance", -1)) == 80.0 and float(wallet.get("frozen", -1)) == 20.0,
+          "balance=%s frozen=%s" % (wallet.get("balance"), wallet.get("frozen")))
+
+    status, body, _ = api.call("GET", "/api/admin/users/%s/wallet-logs" % pub_id, token=admin_token)
+    own_logs = data_of(body) or []
+    check("单用户流水首条为 FREEZE",
+          len(own_logs) >= 1 and own_logs[0].get("type") == "FREEZE",
+          "logs=%d" % len(own_logs))
+    check("单用户流水不混入他人记录",
+          all(long_of(row.get("userId")) == pub_id for row in own_logs), "logs=%d" % len(own_logs))
+
+    status, body, _ = api.call("GET", "/api/admin/wallet-logs?type=FREEZE", token=admin_token)
+    freezes = data_of(body) or []
+    check("全平台流水按 type 筛选",
+          len(freezes) >= 1 and all(row.get("type") == "FREEZE" for row in freezes),
+          "rows=%d" % len(freezes))
+
+    status, body, _ = api.call("GET", "/api/admin/wallet-logs?userId=%s" % pub_id, token=admin_token)
+    pub_logs = data_of(body) or []
+    check("全平台流水按 userId 筛选",
+          len(pub_logs) >= 2 and all(long_of(row.get("userId")) == pub_id for row in pub_logs),
+          "rows=%d" % len(pub_logs))
+
+    summary = data_of(api.call("GET", "/api/admin/wallets/frozen-summary", token=admin_token)[1]) or {}
+    check("冻结核对字段齐全",
+          all(key in summary for key in
+              ("frozenTotal", "inFlightAmount", "diff", "balanced", "inFlightOrderCount")),
+          "frozen=%s inFlight=%s count=%s" % (
+              summary.get("frozenTotal"), summary.get("inFlightAmount"),
+              summary.get("inFlightOrderCount")))
+    check("balanced 与 diff 一致",
+          bool(summary.get("balanced")) == (float(summary.get("diff", 1)) == 0.0),
+          "diff=%s balanced=%s" % (summary.get("diff"), summary.get("balanced")))
 
 
 def main():

@@ -6,7 +6,9 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -39,4 +41,14 @@ public interface TradeOrderRepository extends JpaRepository<TradeOrder, Long> {
     List<TradeOrder> searchForAdmin(@Param("status") OrderStatus status, @Param("postType") PostType postType,
                                     @Param("buyerId") Long buyerId, @Param("sellerId") Long sellerId,
                                     @Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
+
+    /**
+     * 在途订单应冻金额：这些状态下钱还被托管着，未结算也未退回。
+     * 与 WalletRepository.totalFrozen() 的差额是资金监管的核心核对指标。
+     */
+    @Query("select coalesce(sum(o.amount), 0) from TradeOrder o where o.status in :statuses")
+    BigDecimal sumAmountByStatusIn(@Param("statuses") Collection<OrderStatus> statuses);
+
+    @Query("select count(o) from TradeOrder o where o.status in :statuses")
+    long countByStatusIn(@Param("statuses") Collection<OrderStatus> statuses);
 }
