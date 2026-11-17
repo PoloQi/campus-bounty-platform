@@ -31,10 +31,10 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         if (authorization != null && authorization.startsWith("Bearer ")) {
             try {
                 Long userId = jwtUtil.parse(authorization.substring(7));
-                var user = userRepository.findById(userId).orElse(null);
-                if (user != null && !"BANNED".equals(user.getStatus())) {
+                var role = userRepository.findActiveRole(userId).orElse(null);
+                if (role != null) {
                     var authentication = new UsernamePasswordAuthenticationToken(userId, null,
-                            List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole())));
+                            List.of(new SimpleGrantedAuthority("ROLE_" + role)));
                     SecurityContextHolder.getContext().setAuthentication(authentication);
                 }
             } catch (Exception ignored) {

@@ -31,7 +31,8 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties =
+        "spring.datasource.url=jdbc:h2:mem:search_service;MODE=MySQL;DATABASE_TO_LOWER=TRUE")
 @AutoConfigureTestRestTemplate
 @ActiveProfiles("test")
 class SearchServiceTest {

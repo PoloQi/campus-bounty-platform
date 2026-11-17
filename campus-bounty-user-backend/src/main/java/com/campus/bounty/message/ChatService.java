@@ -16,6 +16,9 @@ public class ChatService {
 
     @Transactional
     public Message save(Long fromId, Long toId, String content) {
+        if (userRepository.findActiveRole(fromId).isEmpty()) {
+            throw new BizException(40301, "账号不可用");
+        }
         if (content == null || content.isBlank()) {
             throw new BizException("消息不能为空");
         }

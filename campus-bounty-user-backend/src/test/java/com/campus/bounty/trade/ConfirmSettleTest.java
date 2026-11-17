@@ -5,6 +5,7 @@ import com.campus.bounty.config.JwtUtil;
 import com.campus.bounty.trade.dto.PublishReq;
 import com.campus.bounty.user.User;
 import com.campus.bounty.user.UserService;
+import com.campus.bounty.wallet.WalletLog;
 import com.campus.bounty.wallet.WalletService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -58,8 +59,11 @@ class ConfirmSettleTest {
         assertTrue(walletService.logs(buyer.getId()).stream().anyMatch(log ->
                 log.getType().equals("PAY")
                         && log.getOrderId().equals(order.getId())
-                        && log.getAmount().compareTo(new BigDecimal("-30.00")) == 0
+                        && log.getAmount().compareTo(BigDecimal.ZERO) == 0
                         && log.getBalanceAfter().compareTo(new BigDecimal("70.00")) == 0));
+        BigDecimal ledgerBalance = walletService.logs(buyer.getId()).stream()
+                .map(WalletLog::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        assertEquals(0, ledgerBalance.compareTo(walletService.getOrCreate(buyer.getId()).getBalance()));
         assertTrue(walletService.logs(seller.getId()).stream().anyMatch(log ->
                 log.getType().equals("INCOME")
                         && log.getOrderId().equals(order.getId())

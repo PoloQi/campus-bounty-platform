@@ -4,7 +4,9 @@ import com.campus.bounty.common.BizException;
 import com.campus.bounty.config.JwtUtil;
 import com.campus.bounty.notification.NotificationService;
 import com.campus.bounty.trade.dto.PublishReq;
+import com.campus.bounty.trade.dto.ServicePublishReq;
 import com.campus.bounty.user.User;
+import com.campus.bounty.user.UserRepository;
 import com.campus.bounty.user.UserService;
 import com.campus.bounty.wallet.WalletService;
 import org.junit.jupiter.api.Test;
@@ -15,10 +17,12 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -40,10 +44,13 @@ class AppealFlowTest {
     @Autowired AppealService appealService;
     @Autowired AppealRepository appealRepository;
     @Autowired TradeOrderRepository orderRepository;
+    @Autowired TradePostRepository postRepository;
     @Autowired WalletService walletService;
     @Autowired NotificationService notificationService;
     @Autowired UserService userService;
+    @Autowired UserRepository userRepository;
     @Autowired JwtUtil jwtUtil;
+    @Autowired JdbcTemplate jdbcTemplate;
 
     @Test
     void open_sets_disputed_and_notifies_other_party() {
@@ -146,6 +153,114 @@ class AppealFlowTest {
         ResponseEntity<Map> outsiderView = rest.exchange(url("/api/trade/orders/" + order.getId() + "/appeal"),
                 org.springframework.http.HttpMethod.GET, new HttpEntity<>(authHeaders(outsider)), Map.class);
         assertEquals(40000, ((Number) outsiderView.getBody().get("code")).intValue());
+    }
+
+    @Test
+    void admin_release_over_http_settles_once_and_both_parties_see_the_decision() {
+        User buyer = register("appeal_release_buyer");
+        User seller = register("appeal_release_seller");
+        User admin = registerAdmin("appeal_release_admin");
+        TradeOrder order = inProgress(buyer.getId(), seller.getId());
+        Appeal appeal = appealService.open(order.getId(), seller.getId(), "请求结算");
+        String endpoint = url("/api/admin/appeals/" + appeal.getId() + "/arbitrate");
+        Map<String, String> decision = Map.of("outcome", "RELEASE_TO_SELLER", "comment", "双方确认交付记录");
+
+        var forbidden = rest.postForEntity(endpoint, new HttpEntity<>(decision, authHeaders(buyer)), Map.class);
+        assertEquals(HttpStatus.FORBIDDEN, forbidden.getStatusCode());
+        var pending = rest.exchange(url("/api/admin/appeals?status=OPEN"),
+                HttpMethod.GET, new HttpEntity<>(authHeaders(admin)), Map.class);
+        assertEquals(0, code(pending));
+        assertTrue(pending.getBody().get("data").toString().contains("请求结算"));
+
+        var released = rest.postForEntity(endpoint, new HttpEntity<>(decision, authHeaders(admin)), Map.class);
+        assertEquals(0, code(released));
+        assertEquals(OrderStatus.COMPLETED, orderRepository.findById(order.getId()).orElseThrow().getStatus());
+        assertEquals(PostStatus.CLOSED, postRepository.findById(order.getPostId()).orElseThrow().getStatus());
+        assertMoney("80.00", walletService.getOrCreate(buyer.getId()).getBalance());
+        assertMoney("0.00", walletService.getOrCreate(buyer.getId()).getFrozen());
+        assertMoney("20.00", walletService.getOrCreate(seller.getId()).getBalance());
+        assertEquals(1, auditCount(appeal.getId()));
+        assertEquals(1, resolutionNotices(buyer, order));
+        assertEquals(1, resolutionNotices(seller, order));
+
+        var repeat = rest.postForEntity(endpoint, new HttpEntity<>(decision, authHeaders(admin)), Map.class);
+        assertEquals(40000, code(repeat));
+        assertEquals(1, auditCount(appeal.getId()));
+        assertEquals(1, resolutionNotices(buyer, order));
+        assertEquals(1, resolutionNotices(seller, order));
+        assertMoney("20.00", walletService.getOrCreate(seller.getId()).getBalance());
+
+        String participantEndpoint = url("/api/trade/orders/" + order.getId() + "/appeal");
+        var buyerView = rest.exchange(participantEndpoint, HttpMethod.GET,
+                new HttpEntity<>(authHeaders(buyer)), Map.class);
+        var sellerView = rest.exchange(participantEndpoint, HttpMethod.GET,
+                new HttpEntity<>(authHeaders(seller)), Map.class);
+        assertEquals(0, code(buyerView));
+        Map<?, ?> result = (Map<?, ?>) buyerView.getBody().get("data");
+        assertEquals(result, sellerView.getBody().get("data"));
+        assertEquals("RESOLVED", result.get("status"));
+        assertEquals("RELEASE_TO_SELLER", result.get("outcome"));
+        assertEquals("双方确认交付记录", result.get("adminComment"));
+        assertNotNull(result.get("handledAt"));
+    }
+
+    @Test
+    void refund_returns_only_disputed_service_order_funds_and_leaves_listing_open() {
+        User buyer = register("appeal_refund_buyer");
+        User seller = register("appeal_refund_seller");
+        User admin = registerAdmin("appeal_refund_admin");
+        walletService.recharge(buyer.getId(), new BigDecimal("100.00"));
+        ServicePublishReq request = new ServicePublishReq();
+        request.setTitle("申诉退款服务");
+        request.setDescription("服务帖包含两笔订单");
+        request.setCategory("学习");
+        request.setPrice(new BigDecimal("20.00"));
+        TradePost post = postService.publishService(seller.getId(), request);
+        TradeOrder disputed = orderService.buy(post.getId(), buyer.getId());
+        TradeOrder other = orderService.buy(post.getId(), buyer.getId());
+        Appeal appeal = appealService.open(disputed.getId(), buyer.getId(), "未交付");
+
+        assertThrows(BizException.class, () ->
+                appealService.arbitrate(appeal.getId(), admin.getId(), AppealOutcome.REFUND_TO_BUYER, "  "));
+        Appeal resolved = appealService.arbitrate(appeal.getId(), admin.getId(),
+                AppealOutcome.REFUND_TO_BUYER, "订单未履行");
+        assertEquals("REFUND_TO_BUYER", resolved.getOutcome());
+        assertEquals(OrderStatus.CANCELLED, orderRepository.findById(disputed.getId()).orElseThrow().getStatus());
+        assertEquals(OrderStatus.IN_PROGRESS, orderRepository.findById(other.getId()).orElseThrow().getStatus());
+        assertEquals(PostStatus.OPEN, postRepository.findById(post.getId()).orElseThrow().getStatus());
+        assertMoney("80.00", walletService.getOrCreate(buyer.getId()).getBalance());
+        assertMoney("20.00", walletService.getOrCreate(buyer.getId()).getFrozen());
+        assertMoney("0.00", walletService.getOrCreate(seller.getId()).getBalance());
+        assertEquals(1, walletService.logs(buyer.getId()).stream()
+                .filter(log -> "UNFREEZE".equals(log.getType()) && disputed.getId().equals(log.getOrderId()))
+                .count());
+    }
+
+    private long resolutionNotices(User user, TradeOrder order) {
+        return notificationService.list(user.getId()).stream()
+                .filter(n -> "APPEAL_RESOLVED".equals(n.getType()) && order.getId().equals(n.getRefId()))
+                .count();
+    }
+
+    private long auditCount(Long appealId) {
+        return jdbcTemplate.queryForObject("""
+                select count(*) from admin_log
+                where action = 'ARBITRATE_APPEAL' and target_type = 'APPEAL' and target_id = ?
+                """, Long.class, appealId);
+    }
+
+    private User registerAdmin(String username) {
+        User admin = register(username);
+        admin.setRole("ADMIN");
+        return userRepository.save(admin);
+    }
+
+    private int code(ResponseEntity<Map> response) {
+        return ((Number) response.getBody().get("code")).intValue();
+    }
+
+    private void assertMoney(String expected, BigDecimal actual) {
+        assertEquals(0, new BigDecimal(expected).compareTo(actual));
     }
 
     private TradeOrder inProgress(Long buyerId, Long sellerId) {

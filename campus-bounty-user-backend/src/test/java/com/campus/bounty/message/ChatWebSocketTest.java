@@ -2,6 +2,7 @@ package com.campus.bounty.message;
 
 import com.campus.bounty.config.JwtUtil;
 import com.campus.bounty.user.User;
+import com.campus.bounty.user.UserRepository;
 import com.campus.bounty.user.UserService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -30,6 +31,7 @@ import java.util.concurrent.TimeUnit;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureTestRestTemplate
@@ -42,22 +44,34 @@ class ChatWebSocketTest {
     @Autowired
     UserService userService;
     @Autowired
+    UserRepository userRepository;
+    @Autowired
+    ChatService chatService;
+    @Autowired
     JwtUtil jwtUtil;
     ObjectMapper objectMapper = new ObjectMapper();
 
     @Test
-    void websocket_delivers_message_and_rest_history_returns_it() throws Exception {
+    void websocket_acknowledges_saved_message_delivers_it_and_shows_it_in_history() throws Exception {
         User sender = register("chat_ws_sender");
         User receiver = register("chat_ws_receiver");
         String senderToken = token(sender);
         MessageListener receiverListener = new MessageListener();
         WebSocket receiverSocket = connect(token(receiver), receiverListener);
-        WebSocket senderSocket = connect(senderToken, new MessageListener());
+        MessageListener senderListener = new MessageListener();
+        WebSocket senderSocket = connect(senderToken, senderListener);
 
         try {
-            senderSocket.sendText("{\"toId\":" + receiver.getId() + ",\"content\":\"实时你好\"}", true).join();
+            senderSocket.sendText("{\"toId\":" + receiver.getId()
+                    + ",\"content\":\"实时你好\",\"requestId\":\"send-1\"}", true).join();
 
+            JsonNode acknowledged = objectMapper.readTree(senderListener.nextText.get(5, TimeUnit.SECONDS));
             JsonNode pushed = objectMapper.readTree(receiverListener.nextText.get(5, TimeUnit.SECONDS));
+            assertEquals("ACK", acknowledged.get("action").asText());
+            assertEquals("send-1", acknowledged.get("requestId").asText());
+            assertEquals(pushed.get("id"), acknowledged.get("id"));
+            assertEquals(pushed.get("content"), acknowledged.get("content"));
+            assertEquals(pushed.get("createdAt"), acknowledged.get("createdAt"));
             assertEquals(sender.getId(), pushed.get("fromId").asLong());
             assertEquals(receiver.getId(), pushed.get("toId").asLong());
             assertEquals("实时你好", pushed.get("content").asText());
@@ -71,9 +85,30 @@ class ChatWebSocketTest {
             List<Map<String, Object>> history = (List<Map<String, Object>>) response.getBody().get("data");
             assertEquals(1, history.size());
             assertEquals("实时你好", history.get(0).get("content"));
+            assertEquals(acknowledged.get("id").asLong(), ((Number) history.get(0).get("id")).longValue());
         } finally {
             senderSocket.sendClose(WebSocket.NORMAL_CLOSURE, "done").join();
             receiverSocket.sendClose(WebSocket.NORMAL_CLOSURE, "done").join();
+        }
+    }
+
+    @Test
+    void websocket_acknowledges_message_when_recipient_is_offline() throws Exception {
+        User sender = register("chat_ws_offline_sender");
+        User receiver = register("chat_ws_offline_receiver");
+        MessageListener senderListener = new MessageListener();
+        WebSocket senderSocket = connect(token(sender), senderListener);
+
+        try {
+            senderSocket.sendText("{\"toId\":" + receiver.getId()
+                    + ",\"content\":\"离线消息\",\"requestId\":\"send-offline\"}", true).join();
+
+            JsonNode acknowledged = objectMapper.readTree(senderListener.nextText.get(5, TimeUnit.SECONDS));
+            assertEquals("ACK", acknowledged.get("action").asText());
+            assertEquals("send-offline", acknowledged.get("requestId").asText());
+            assertEquals(receiver.getId(), acknowledged.get("toId").asLong());
+        } finally {
+            senderSocket.sendClose(WebSocket.NORMAL_CLOSURE, "done").join();
         }
     }
 
@@ -83,15 +118,40 @@ class ChatWebSocketTest {
     }
 
     @Test
+    void banned_sender_cannot_store_messages_through_an_open_connection() throws Exception {
+        User sender = register("chat_ws_banned_sender");
+        User receiver = register("chat_ws_banned_receiver");
+        MessageListener listener = new MessageListener();
+        WebSocket socket = connect(token(sender), listener);
+        try {
+            sender.setStatus("BANNED");
+            userRepository.saveAndFlush(sender);
+            socket.sendText("{\"toId\":" + receiver.getId() + ",\"content\":\"你好\",\"requestId\":\"banned\"}",
+                    true).join();
+
+            JsonNode error = objectMapper.readTree(listener.nextText.get(5, TimeUnit.SECONDS));
+            assertEquals("ERROR", error.get("action").asText());
+            assertEquals("banned", error.get("requestId").asText());
+            assertEquals("账号不可用", error.get("error").asText());
+            assertTrue(chatService.history(sender.getId(), receiver.getId()).isEmpty());
+        } finally {
+            socket.sendClose(WebSocket.NORMAL_CLOSURE, "done").join();
+        }
+    }
+
+    @Test
     void websocket_returns_business_error_without_closing_sender() throws Exception {
         User sender = register("chat_ws_error_sender");
         MessageListener senderListener = new MessageListener();
         WebSocket senderSocket = connect(token(sender), senderListener);
 
         try {
-            senderSocket.sendText("{\"toId\":99999999,\"content\":\"你好\"}", true).join();
+            senderSocket.sendText("{\"toId\":99999999,\"content\":\"你好\",\"requestId\":\"invalid-target\"}",
+                    true).join();
 
             JsonNode error = objectMapper.readTree(senderListener.nextText.get(5, TimeUnit.SECONDS));
+            assertEquals("ERROR", error.get("action").asText());
+            assertEquals("invalid-target", error.get("requestId").asText());
             assertEquals("接收用户不存在", error.get("error").asText());
             assertFalse(senderSocket.isOutputClosed());
         } finally {

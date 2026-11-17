@@ -60,7 +60,7 @@ public class PostService {
     }
 
     private Post visibleOwnedPost(Long postId, Long authorId) {
-        Post post = postRepository.findById(postId)
+        Post post = postRepository.findByIdForUpdate(postId)
                 .orElseThrow(() -> new BizException("帖子不存在"));
         if (!post.getAuthorId().equals(authorId)) {
             throw new BizException("只有作者可以操作该帖子");

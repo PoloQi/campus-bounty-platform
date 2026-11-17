@@ -6,4 +6,5 @@ import java.util.List;
 
 public interface WalletLogRepository extends JpaRepository<WalletLog, Long> {
     List<WalletLog> findByUserIdOrderByIdDesc(Long userId);
+    List<WalletLog> findByOrderIdOrderByIdAsc(Long orderId);
 }

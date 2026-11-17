@@ -50,4 +50,13 @@ public class ReviewService {
     public List<Review> ofUser(Long userId) {
         return reviewRepository.findByToUserIdOrderByIdDesc(userId);
     }
+
+    public List<Review> ofOrder(Long orderId, Long viewerId) {
+        TradeOrder order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new BizException("订单不存在"));
+        if (!viewerId.equals(order.getBuyerId()) && !viewerId.equals(order.getSellerId())) {
+            throw new BizException("你不是该订单参与方");
+        }
+        return reviewRepository.findByOrderIdOrderByIdAsc(orderId);
+    }
 }

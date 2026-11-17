@@ -91,6 +91,7 @@ class ReviewServiceTest {
     void authenticated_review_endpoints_create_and_list_review() {
         User buyer = register("review_http_buyer");
         User seller = register("review_http_seller");
+        User outsider = register("review_http_outsider");
         TradeOrder order = newPendingOrder(buyer);
         complete(order, seller);
         HttpEntity<Map<String, Object>> createRequest = new HttpEntity<>(
@@ -106,6 +107,17 @@ class ReviewServiceTest {
         assertEquals(1, data.size());
         assertEquals(reviewId, ((Number) data.get(0).get("id")).longValue());
         assertEquals("HTTP评价", data.get(0).get("content"));
+
+        reviewService.review(order.getId(), seller.getId(), "本单卖家反馈");
+        String orderReviews = url("/api/reviews/order/" + order.getId());
+        var fromBuyer = rest.exchange(orderReviews, HttpMethod.GET, new HttpEntity<>(authHeaders(buyer)), Map.class);
+        var fromSeller = rest.exchange(orderReviews, HttpMethod.GET, new HttpEntity<>(authHeaders(seller)), Map.class);
+        var fromOutsider = rest.exchange(orderReviews, HttpMethod.GET,
+                new HttpEntity<>(authHeaders(outsider)), Map.class);
+        List<Map<String, Object>> orderData = (List<Map<String, Object>>) fromBuyer.getBody().get("data");
+        assertEquals(List.of("HTTP评价", "本单卖家反馈"), orderData.stream().map(row -> row.get("content")).toList());
+        assertEquals(orderData, fromSeller.getBody().get("data"));
+        assertEquals(40000, ((Number) fromOutsider.getBody().get("code")).intValue());
     }
 
     private TradeOrder newPendingOrder(User buyer) {

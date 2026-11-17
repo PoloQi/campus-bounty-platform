@@ -1,10 +1,12 @@
 package com.campus.bounty.trade;
 
+import com.campus.bounty.admin.AdminService;
 import com.campus.bounty.common.BizException;
 import com.campus.bounty.config.JwtUtil;
 import com.campus.bounty.trade.dto.OrderDetailView;
 import com.campus.bounty.trade.dto.ServicePublishReq;
 import com.campus.bounty.user.User;
+import com.campus.bounty.user.UserRepository;
 import com.campus.bounty.user.UserService;
 import com.campus.bounty.wallet.WalletService;
 import org.junit.jupiter.api.Test;
@@ -19,11 +21,19 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -49,6 +59,12 @@ class ServiceBuyTest {
     UserService userService;
     @Autowired
     JwtUtil jwtUtil;
+    @Autowired
+    AdminService adminService;
+    @Autowired
+    UserRepository userRepository;
+    @Autowired
+    TransactionTemplate transactions;
 
     @Test
     void buy_creates_in_progress_order_and_freezes_buyer_funds() {
@@ -105,6 +121,43 @@ class ServiceBuyTest {
                 .compareTo(new BigDecimal("20.00")));
         assertNull(postService.detail(post.getId()).getOrder());
         assertEquals(PostStatus.OPEN, post.getStatus());
+    }
+
+    @Test
+    void buy_waits_for_in_flight_delisting_and_then_rejects_closed_post() throws Exception {
+        User publisher = register("service_delist_publisher");
+        User buyer = register("service_delist_buyer");
+        User admin = register("service_delist_admin");
+        admin.setRole("ADMIN");
+        userRepository.save(admin);
+        walletService.recharge(buyer.getId(), new BigDecimal("50.00"));
+        TradePost post = publish(publisher, "20.00");
+
+        var executor = Executors.newSingleThreadExecutor();
+        try {
+            Future<TradeOrder> buy = transactions.execute(status -> {
+                adminService.closeTradePost(admin.getId(), post.getId());
+                var starting = new CountDownLatch(1);
+                Future<TradeOrder> task = executor.submit(() -> {
+                    starting.countDown();
+                    return orderService.buy(post.getId(), buyer.getId());
+                });
+                try {
+                    assertTrue(starting.await(2, TimeUnit.SECONDS));
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new AssertionError(e);
+                }
+                assertThrows(TimeoutException.class, () -> task.get(300, TimeUnit.MILLISECONDS));
+                return task;
+            });
+            ExecutionException rejected = assertThrows(ExecutionException.class, () -> buy.get(3, TimeUnit.SECONDS));
+            assertEquals("服务已下架", assertInstanceOf(BizException.class, rejected.getCause()).getMessage());
+        } finally {
+            executor.shutdownNow();
+        }
+        assertTrue(orderService.ordersAsBuyer(buyer.getId()).isEmpty());
+        assertEquals(0, walletService.getOrCreate(buyer.getId()).getFrozen().compareTo(BigDecimal.ZERO));
     }
 
     @Test

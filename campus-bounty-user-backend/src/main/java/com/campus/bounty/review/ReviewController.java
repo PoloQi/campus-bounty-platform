@@ -30,4 +30,9 @@ public class ReviewController {
     public ApiResponse<List<Review>> ofUser(@PathVariable Long userId) {
         return ApiResponse.ok(reviewService.ofUser(userId));
     }
+
+    @GetMapping("/order/{orderId}")
+    public ApiResponse<List<Review>> ofOrder(@PathVariable Long orderId) {
+        return ApiResponse.ok(reviewService.ofOrder(orderId, CurrentUser.id()));
+    }
 }
