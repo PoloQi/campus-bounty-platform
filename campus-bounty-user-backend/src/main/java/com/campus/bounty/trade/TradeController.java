@@ -2,6 +2,7 @@ package com.campus.bounty.trade;
 
 import com.campus.bounty.common.ApiResponse;
 import com.campus.bounty.config.CurrentUser;
+import com.campus.bounty.trade.dto.ExtendDeadlineReq;
 import com.campus.bounty.trade.dto.OrderDetailView;
 import com.campus.bounty.trade.dto.PostView;
 import com.campus.bounty.trade.dto.PublishReq;
@@ -65,6 +66,11 @@ public class TradeController {
         return ApiResponse.ok(orderService.accept(id, CurrentUser.id()));
     }
 
+    @PostMapping("/orders/{id}/extend")
+    public ApiResponse<TradeOrder> extend(@PathVariable Long id, @Valid @RequestBody ExtendDeadlineReq request) {
+        return ApiResponse.ok(orderService.extendDeadline(id, CurrentUser.id(), request.deadline()));
+    }
+
     @PostMapping("/orders/{id}/deliver")
     public ApiResponse<TradeOrder> deliver(@PathVariable Long id) {
         return ApiResponse.ok(orderService.deliver(id, CurrentUser.id()));
@@ -81,8 +87,8 @@ public class TradeController {
     }
 
     @PostMapping("/orders/{id}/appeal")
-    public ApiResponse<Appeal> appeal(@PathVariable Long id, @RequestBody Map<String, Object> body) {
-        return ApiResponse.ok(appealService.open(id, CurrentUser.id(), String.valueOf(body.get("reason"))));
+    public ApiResponse<Appeal> appeal(@PathVariable Long id, @RequestBody AppealRequest request) {
+        return ApiResponse.ok(appealService.open(id, CurrentUser.id(), request.reason()));
     }
 
     @PostMapping("/appeals/{id}/withdraw")
@@ -91,9 +97,11 @@ public class TradeController {
     }
 
     @GetMapping("/orders/{id}/appeal")
-    public ApiResponse<Appeal> openAppeal(@PathVariable Long id) {
-        return ApiResponse.ok(appealService.viewOpen(id, CurrentUser.id()));
+    public ApiResponse<Appeal> latestAppeal(@PathVariable Long id) {
+        return ApiResponse.ok(appealService.viewLatest(id, CurrentUser.id()));
     }
+
+    record AppealRequest(String reason) {}
 
     @GetMapping("/orders/mine")
     public ApiResponse<Map<String, Object>> mineOrders() {

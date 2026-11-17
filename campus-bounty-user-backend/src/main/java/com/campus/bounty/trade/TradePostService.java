@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -20,6 +21,10 @@ public class TradePostService {
 
     @Transactional
     public TradePost publish(Long publisherId, PublishReq request) {
+        LocalDateTime deadline = request.getDeadline();
+        if (deadline == null || !deadline.isAfter(LocalDateTime.now())) {
+            throw new BizException("接单截止时间必须晚于当前时间");
+        }
         TradePost post = new TradePost();
         post.setPublisherId(publisherId);
         post.setType(PostType.BOUNTY);
@@ -28,7 +33,7 @@ public class TradePostService {
         post.setImages(request.getImages());
         post.setPrice(request.getPrice());
         post.setCategory(request.getCategory());
-        post.setDeadline(request.getDeadline());
+        post.setDeadline(deadline);
         postRepository.save(post);
 
         TradeOrder order = new TradeOrder();

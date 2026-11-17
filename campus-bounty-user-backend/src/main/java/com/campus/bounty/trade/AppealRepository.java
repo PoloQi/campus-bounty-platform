@@ -1,6 +1,10 @@
 package com.campus.bounty.trade;
 
+import jakarta.persistence.LockModeType;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -10,16 +14,21 @@ import java.util.Optional;
 public interface AppealRepository extends JpaRepository<Appeal, Long> {
     Optional<Appeal> findFirstByOrderIdAndStatusOrderByIdDesc(Long orderId, String status);
 
+    Optional<Appeal> findFirstByOrderIdOrderByIdDesc(Long orderId);
+
     List<Appeal> findByOrderIdOrderByIdDesc(Long orderId);
 
-    /**
-     * 管理端申诉列表：status 可选，**OPEN 永远排在前面**（待办优先），同状态内新的在前。
-     * CASE 排序是 JPQL 支持的写法，不必为此引入 Sort/Specification。
-     */
-    @Query("select a from Appeal a where (:status is null or a.status = :status) "
-            + "order by case when a.status = 'OPEN' then 0 else 1 end, a.id desc")
-    List<Appeal> searchForAdmin(@Param("status") String status);
+    @Query("select a.orderId from Appeal a where a.id = :id")
+    Optional<Long> findOrderId(@Param("id") Long id);
 
-    /** 看板待办数：OPEN 申诉条数。 */
-    long countByStatus(String status);
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select a from Appeal a where a.id = :id")
+    Optional<Appeal> findByIdForUpdate(@Param("id") Long id);
+
+    @Query(value = """
+            select a from Appeal a
+            where (:status is null or a.status = :status)
+            order by case when a.status = 'OPEN' then 0 else 1 end, a.id desc
+            """, countQuery = "select count(a) from Appeal a where (:status is null or a.status = :status)")
+    Page<Appeal> listForAdmin(@Param("status") String status, Pageable pageable);
 }

@@ -45,7 +45,7 @@ public class UserService {
 
     @Transactional
     public User updateProfile(Long userId, UpdateProfileReq request) {
-        User user = userRepository.findById(userId)
+        User user = userRepository.findByIdForUpdate(userId)
                 .orElseThrow(() -> new BizException("用户不存在"));
         if (request.getNickname() != null) {
             user.setNickname(request.getNickname().isBlank() ? null : request.getNickname());

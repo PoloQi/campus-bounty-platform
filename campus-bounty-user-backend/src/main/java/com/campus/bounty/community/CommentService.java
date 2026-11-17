@@ -25,7 +25,7 @@ public class CommentService {
 
     @Transactional
     public int toggleLike(Long postId, Long userId) {
-        Post post = visiblePost(postId);
+        Post post = visiblePost(postRepository.findByIdForUpdate(postId));
         Optional<PostLike> existing = likeRepository.findByPostIdAndUserId(postId, userId);
         if (existing.isPresent()) {
             likeRepository.delete(existing.get());
@@ -43,7 +43,7 @@ public class CommentService {
 
     @Transactional
     public Comment add(Long postId, Long authorId, CommentReq request) {
-        visiblePost(postId);
+        visiblePost(postRepository.findByIdForUpdate(postId));
         if (request.getContent() == null || request.getContent().isBlank()) {
             throw new BizException("评论内容不能为空");
         }
@@ -67,7 +67,7 @@ public class CommentService {
     }
 
     public List<CommentResp> list(Long postId) {
-        visiblePost(postId);
+        visiblePost(postRepository.findById(postId));
         List<Comment> comments = commentRepository.findByPostIdOrderByIdAsc(postId);
         Map<Long, User> authors = userRepository.findAllById(comments.stream()
                         .map(Comment::getAuthorId).distinct().toList()).stream()
@@ -81,9 +81,8 @@ public class CommentService {
         }).toList();
     }
 
-    private Post visiblePost(Long postId) {
-        Post post = postRepository.findById(postId)
-                .orElseThrow(() -> new BizException("帖子不存在"));
+    private Post visiblePost(Optional<Post> found) {
+        Post post = found.orElseThrow(() -> new BizException("帖子不存在"));
         if (!"VISIBLE".equals(post.getStatus())) {
             throw new BizException("帖子已删除");
         }

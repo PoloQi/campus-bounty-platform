@@ -73,16 +73,21 @@ public class WalletService {
     @Transactional
     public void settle(Long buyerId, Long sellerId, BigDecimal amount, Long orderId) {
         validateAmount(amount);
-        Wallet buyer = lock(buyerId);
+        // Two orders between the same users may settle in opposite directions.
+        boolean buyerFirst = buyerId.compareTo(sellerId) < 0;
+        Wallet first = lock(buyerFirst ? buyerId : sellerId);
+        Wallet second = lock(buyerFirst ? sellerId : buyerId);
+        Wallet buyer = buyerFirst ? first : second;
+        Wallet seller = buyerFirst ? second : first;
         if (buyer.getFrozen().compareTo(amount) < 0) {
             throw new BizException("冻结金额异常，无法结算");
         }
         buyer.setFrozen(buyer.getFrozen().subtract(amount));
         Wallet savedBuyer = walletRepository.save(buyer);
-        walletLogRepository.save(WalletLog.of(buyerId, "PAY", amount.negate(),
-                savedBuyer.getBalance(), orderId, "悬赏支出"));
+        // The buyer's available balance changed when this order was funded.
+        walletLogRepository.save(WalletLog.of(buyerId, "PAY", BigDecimal.ZERO,
+                savedBuyer.getBalance(), orderId, "订单托管款已结算 ¥" + amount.setScale(2).toPlainString()));
 
-        Wallet seller = lock(sellerId);
         seller.setBalance(seller.getBalance().add(amount));
         Wallet savedSeller = walletRepository.save(seller);
         walletLogRepository.save(WalletLog.of(sellerId, "INCOME", amount,

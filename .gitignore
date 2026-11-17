@@ -1,0 +1,4 @@
+# Local QA evidence and production-data rollback exports
+/design-qa.md
+/wallet-rollback-*.sql
+/campus-bounty-user-backend/uploads/

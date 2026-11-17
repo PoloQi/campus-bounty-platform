@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -19,6 +20,11 @@ public class NotificationService {
         notification.setContent(content);
         notification.setRefId(refId);
         notificationRepository.save(notification);
+    }
+
+    public boolean hasNotificationSince(Long userId, String type, Long refId, LocalDateTime since) {
+        return notificationRepository.existsByUserIdAndTypeAndRefIdAndCreatedAtGreaterThanEqual(
+                userId, type, refId, since);
     }
 
     public List<Notification> list(Long userId) {

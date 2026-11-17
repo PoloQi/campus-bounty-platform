@@ -106,7 +106,7 @@ class WalletDomainTest {
 
         WalletLog pay = latestLog(buyer.getId());
         assertEquals("PAY", pay.getType());
-        assertMoney("-50.00", pay.getAmount());
+        assertMoney("0.00", pay.getAmount());
         assertMoney("50.00", pay.getBalanceAfter());
         assertEquals(105L, pay.getOrderId());
 

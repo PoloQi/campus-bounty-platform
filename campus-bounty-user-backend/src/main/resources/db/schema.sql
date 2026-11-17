@@ -147,10 +147,6 @@ CREATE TABLE IF NOT EXISTS t_report (
     reporter_id BIGINT NOT NULL,
     reason VARCHAR(200) NOT NULL,
     status VARCHAR(16) NOT NULL DEFAULT 'PENDING',
-    handler_id BIGINT NULL,
-    handled_at DATETIME NULL,
-    result VARCHAR(16) NULL,
-    handle_comment VARCHAR(500) NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     INDEX idx_report_status (status, id),
@@ -176,18 +172,26 @@ CREATE TABLE IF NOT EXISTS t_appeal (
     INDEX idx_appeal_status (status, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 管理端审计日志：只增不改不删，是举报处置与仲裁的前置依赖
--- 索引按「adminId / action 筛选 + 时间区间 + 倒序」的实际查询形态设计
-CREATE TABLE IF NOT EXISTS t_admin_log (
+CREATE TABLE IF NOT EXISTS t_report_resolution (
+    report_id BIGINT NOT NULL,
+    result VARCHAR(16) NOT NULL,
+    comment VARCHAR(500) NOT NULL,
+    admin_id BIGINT NOT NULL,
+    handled_at DATETIME NOT NULL,
+    moderation_action VARCHAR(24) NULL,
+    PRIMARY KEY (report_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS admin_log (
     id BIGINT NOT NULL AUTO_INCREMENT,
     admin_id BIGINT NOT NULL,
     action VARCHAR(24) NOT NULL,
-    target_type VARCHAR(24) NULL,
-    target_id BIGINT NULL,
-    detail VARCHAR(500) NULL,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    target_type VARCHAR(16) NOT NULL,
+    target_id BIGINT NOT NULL,
+    details VARCHAR(1000) NOT NULL,
+    created_at DATETIME NOT NULL,
     PRIMARY KEY (id),
     INDEX idx_admin_log_admin (admin_id, id),
     INDEX idx_admin_log_action (action, id),
-    INDEX idx_admin_log_created (created_at)
+    INDEX idx_admin_log_target (target_type, target_id, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
