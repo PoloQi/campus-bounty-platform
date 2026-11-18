@@ -11,7 +11,7 @@ import lombok.Getter;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "admin_log")
+@Table(name = "t_admin_log")
 @Getter
 public class AdminLog {
     @Id
@@ -21,24 +21,23 @@ public class AdminLog {
     private Long adminId;
     @Column(nullable = false, length = 24)
     private String action;
-    @Column(nullable = false, length = 16)
+    @Column(length = 24)
     private String targetType;
-    @Column(nullable = false)
     private Long targetId;
-    @Column(nullable = false, length = 1000)
-    private String details;
+    @Column(length = 500)
+    private String detail;
     @Column(nullable = false)
     private LocalDateTime createdAt;
 
     protected AdminLog() {
     }
 
-    AdminLog(Long adminId, String action, String targetType, Long targetId, String details) {
+    AdminLog(Long adminId, String action, String targetType, Long targetId, String detail) {
         this.adminId = adminId;
         this.action = action;
         this.targetType = targetType;
         this.targetId = targetId;
-        this.details = details;
+        this.detail = detail;
         this.createdAt = LocalDateTime.now();
     }
 }

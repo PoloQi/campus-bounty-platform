@@ -244,7 +244,7 @@ class AppealFlowTest {
 
     private long auditCount(Long appealId) {
         return jdbcTemplate.queryForObject("""
-                select count(*) from admin_log
+                select count(*) from t_admin_log
                 where action = 'ARBITRATE_APPEAL' and target_type = 'APPEAL' and target_id = ?
                 """, Long.class, appealId);
     }

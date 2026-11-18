@@ -14,6 +14,7 @@ import java.util.UUID;
 @Service
 public class FileStorageService {
     private static final long MAX_SIZE = 5L * 1024 * 1024;
+    static final String FILE_TOO_LARGE_MESSAGE = "图片大小不能超过 5 MB";
     private static final Set<String> ALLOWED_EXTENSIONS = Set.of("jpg", "jpeg", "png", "gif", "webp");
 
     private final Path uploadDir;
@@ -27,7 +28,7 @@ public class FileStorageService {
             throw new BizException("图片不能为空");
         }
         if (file.getSize() > MAX_SIZE) {
-            throw new BizException("图片大小不能超过5MB");
+            throw new BizException(FILE_TOO_LARGE_MESSAGE);
         }
 
         String originalFilename = file.getOriginalFilename();

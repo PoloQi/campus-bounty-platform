@@ -1,7 +1,8 @@
 import {
   api, dateTime, errorText, esc, icon, imageUrl, money, routeHref,
-  safeReturnRoute, toast, uploadImage
+  toast, uploadImage
 } from './core.js';
+import {openReport} from './communication.js';
 
 const accountNav = [
   ['profile', 'users', '个人资料'],
@@ -71,78 +72,6 @@ function formError() {
   return '<p class="form-error" role="alert" tabindex="-1" hidden></p>';
 }
 
-function renderAuth(ctx, registering) {
-  const next = safeReturnRoute(ctx.query.get('next'));
-  const suffix = next === '#/' ? '' : '?' + new URLSearchParams({ next });
-  const target = routeHref(registering ? 'login' : 'register') + suffix;
-  const title = registering ? '注册校园账号' : '登录校园悬赏';
-
-  if (!ctx.show(`
-    <section class="student-auth">
-      <div class="student-auth-intro">
-        <span class="student-auth-mark">${icon('ticket', 34)}</span>
-        <p class="student-auth-display">校园里的事，<br>一起解决。</p>
-        <p>有需要就发悬赏，有特长就挂牌服务，也可以来社区找搭子。</p>
-      </div>
-      <div class="panel student-auth-entry">
-        <h1>${title}</h1>
-        <p class="muted">${registering ? '填写基本信息，创建学生账号。' : '欢迎回来，登录后开始校园互助。'}</p>
-        <form class="fields">
-          <label class="field">用户名
-            <input name="username" required maxlength="20" ${registering ? 'minlength="4"' : ''}
-              autocomplete="username" placeholder="${registering ? '输入 4–20 位用户名' : '输入用户名'}">
-          </label>
-          <label class="field">密码
-            <input name="password" type="password" required maxlength="32"
-              ${registering ? 'minlength="6" autocomplete="new-password"' : 'autocomplete="current-password"'}
-              placeholder="${registering ? '输入 6–32 位密码' : '输入密码'}">
-          </label>
-          ${registering ? `
-            <label class="field">确认密码
-              <input name="confirmPassword" type="password" required minlength="6" maxlength="32"
-                autocomplete="new-password" placeholder="再次输入密码">
-            </label>
-            <label class="field">昵称 <span class="muted">选填</span>
-              <input name="nickname" maxlength="20" autocomplete="nickname" placeholder="留空时使用用户名">
-            </label>` : ''}
-          ${formError()}
-          <button class="button" type="submit">${registering ? '创建账号' : '登录'}</button>
-        </form>
-        <p class="student-auth-switch">${registering ? '已有账号？' : '还没有账号？'}
-          <a href="${esc(target)}">${registering ? '去登录' : '立即注册'}</a>
-        </p>
-      </div>
-    </section>`)) return;
-
-  const form = ctx.main.querySelector('form');
-  attachForm(form, async fields => {
-    fields.username = fields.username.trim();
-    if (!fields.username) throw new StudentValidationError('请输入用户名。');
-    if (registering) {
-      if (fields.username.length < 4) throw new StudentValidationError('用户名至少需要 4 位。');
-      if (fields.password !== fields.confirmPassword) throw new StudentValidationError('两次输入的密码不一致。');
-      fields.nickname = fields.nickname.trim();
-      await api('/api/auth/register', { method: 'POST', body: fields, signal: ctx.signal });
-      if (!form.isConnected) return;
-      toast('账号已创建，请登录。');
-      location.hash = target;
-      return;
-    }
-    const session = await api('/api/auth/login', { method: 'POST', body: fields, signal: ctx.signal });
-    if (!form.isConnected) return;
-    ctx.setSession(session.token, {
-      id: session.userId, role: session.role, username: fields.username,
-      nickname: session.nickname, displayName: session.nickname || fields.username
-    });
-    if (session.role === 'ADMIN') {
-      location.assign('/admin');
-      return;
-    }
-    location.hash = next;
-    toast('登录成功。');
-  });
-}
-
 function avatarMarkup(avatar, name) {
   const image = imageUrl(avatar);
   return image
@@ -187,7 +116,7 @@ async function renderProfile(ctx) {
         </div>
       </form>
     </section>`;
-  if (!ctx.show(accountLayout('profile', '个人资料', '编辑头像、昵称、简介和联系方式。', content))) return;
+  if (!await ctx.show(accountLayout('profile', '个人资料', '编辑头像、昵称、简介和联系方式。', content))) return;
 
   const form = ctx.main.querySelector('form');
   const file = form.querySelector('#student-avatar-file');
@@ -238,9 +167,7 @@ async function renderProfile(ctx) {
         body: { nickname: fields.nickname.trim(), contact: fields.contact.trim(), bio: fields.bio.trim(), avatar }
       });
       if (!form.isConnected) return;
-      ctx.updateUser({
-        ...ctx.user, ...saved, avatarUrl: saved.avatar, displayName: saved.nickname || saved.username
-      });
+      ctx.updateUser(saved);
       toast('个人资料已保存。');
       ctx.refresh();
     } finally {
@@ -265,7 +192,7 @@ async function renderPersonal(ctx) {
     const content = `<section class="panel student-list">
       ${rows ? `<ul>${rows}</ul>` : '<p class="empty">你还没有发布过社区帖子。</p>'}
     </section>`;
-    ctx.show(accountLayout('personal', '我的帖子', '查看自己发布的社区帖子及状态。', content,
+    await ctx.show(accountLayout('personal', '我的帖子', '查看自己发布的社区帖子及状态。', content,
       `<a class="button secondary" href="${routeHref('personal')}">返回个人中心</a>`));
     return;
   }
@@ -275,7 +202,7 @@ async function renderPersonal(ctx) {
       <span><strong>${label}</strong><span class="muted">${description}</span></span>
       ${icon('arrow', 19)}
     </a>`).join('')}</div>`;
-  ctx.show(accountLayout('personal', '个人中心', '查看交易进度、管理发布内容和个人资料。', content));
+  await ctx.show(accountLayout('personal', '个人中心', '查看交易进度、管理发布内容和个人资料。', content));
 }
 
 function ledgerAmount(log) {
@@ -341,7 +268,7 @@ async function renderWallet(ctx) {
     <section class="panel student-ledger">
       <h2>资金流水</h2><div data-student-ledger>${renderLedger(logs)}</div>
     </section>`;
-  if (!ctx.show(accountLayout('wallet', '我的钱包', '查看余额、交易冻结金额及资金流水。', content))) return;
+  if (!await ctx.show(accountLayout('wallet', '我的钱包', '查看余额、交易冻结金额及资金流水。', content))) return;
   const form = ctx.main.querySelector('form');
   const balance = ctx.main.querySelector('[data-student-balance]');
   const frozen = ctx.main.querySelector('[data-student-frozen]');
@@ -368,8 +295,12 @@ async function renderWallet(ctx) {
 async function renderReviews(ctx) {
   const id = ctx.args[0] || ctx.user.id;
   if (!/^[1-9]\d*$/.test(String(id))) throw new Error('用户不存在。');
-  const reviews = await api('/api/reviews/user/' + encodeURIComponent(id), { signal: ctx.signal });
   const mine = String(id) === String(ctx.user.id);
+  const options = {signal: ctx.signal};
+  const [reviews, peer] = await Promise.all([
+    api('/api/reviews/user/' + encodeURIComponent(id), options),
+    mine ? null : api('/api/users/' + encodeURIComponent(id) + '/summary', options),
+  ]);
   const rows = reviews.map(review => `
     <li class="student-item"><div><p class="student-post-copy">${esc(review.content)}</p>
       <p class="muted">同学 #${esc(review.fromUserId)} · ${esc(dateTime(review.createdAt))}</p>
@@ -379,18 +310,19 @@ async function renderReviews(ctx) {
     ${rows ? `<ul>${rows}</ul>` : '<p class="empty">暂无已完成订单的互评记录。</p>'}
   </section>`;
   if (mine) {
-    ctx.show(accountLayout('reviews', '收到的评价', '来自已完成订单的交易评价。', content));
+    await ctx.show(accountLayout('reviews', '收到的评价', '来自已完成订单的交易评价。', content));
     return;
   }
-  ctx.show(`
-    <header class="page-head"><div><h1>同学 #${esc(id)} 的评价</h1><p class="muted">来自已完成订单的交易评价。</p></div></header>
-    ${content}`);
+  const name = peer.nickname || `同学 #${id}`;
+  if (!await ctx.show(`
+    <header class="page-head"><div><h1>${esc(name)} 的评价</h1><p class="muted">来自已完成订单的交易评价。</p></div>
+      <button class="button quiet" type="button" data-report-user>举报用户</button></header>
+    ${content}`)) return;
+  ctx.main.querySelector('[data-report-user]').addEventListener('click', () => openReport('USER', peer.id));
 }
 
 export async function renderStudent(ctx) {
   switch (ctx.route) {
-    case 'login': return renderAuth(ctx, false);
-    case 'register': return renderAuth(ctx, true);
     case 'profile': return renderProfile(ctx);
     case 'personal': return renderPersonal(ctx);
     case 'wallet': return renderWallet(ctx);

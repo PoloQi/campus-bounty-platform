@@ -23,10 +23,12 @@ import org.springframework.test.context.ActiveProfiles;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -40,6 +42,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @AutoConfigureTestRestTemplate
 @ActiveProfiles("test")
 class BountyExpiryFlowTest {
+    private static final ZoneId BEIJING = ZoneId.of("Asia/Shanghai");
     private static final BigDecimal BALANCE = new BigDecimal("100.00");
     private static final BigDecimal REWARD = new BigDecimal("20.00");
 
@@ -49,6 +52,7 @@ class BountyExpiryFlowTest {
     @Autowired TradeOrderService orderService;
     @Autowired TradeOrderRepository orders;
     @Autowired TradePostRepository posts;
+    @Autowired BountyExpiryScheduler scheduler;
     @Autowired NotificationRepository notifications;
     @Autowired SearchService search;
     @Autowired WalletService wallet;
@@ -63,7 +67,7 @@ class BountyExpiryFlowTest {
         String title = "悬赏到期测试：搬图书";
         TradeOrder order = publish(publisher, title);
         String path = "/api/trade/orders/" + order.getId();
-        LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS);
+        LocalDateTime now = LocalDateTime.now(BEIJING).truncatedTo(ChronoUnit.SECONDS);
         LocalDateTime renewal = now.plusHours(2);
         assertNotEquals(0, code(post(path + "/extend", publisher, Map.of("deadline", renewal.toString()))));
 
@@ -75,11 +79,12 @@ class BountyExpiryFlowTest {
         assertVisibility(order.getPostId(), title, false);
         assertWallet(publisher, BALANCE.subtract(REWARD), REWARD);
 
-        orderService.notifyDeadlineElapsed(order.getId());
-        orderService.notifyDeadlineElapsed(order.getId());
+        scheduler.notifyDueBounties();
+        scheduler.notifyDueBounties();
         List<Notification> first = expiryNotices(publisher);
         assertEquals(1, first.size());
         assertEquals(order.getId(), first.get(0).getRefId());
+        assertFalse(first.get(0).getCreatedAt().isBefore(now));
         assertFalse(first.get(0).isRead());
         assertTrue(expiryNotices(other).isEmpty());
 
@@ -126,7 +131,7 @@ class BountyExpiryFlowTest {
         wallet.recharge(publisher.getId(), BALANCE);
         TradeOrder order = publish(publisher, "悬赏到期测试：已接单");
         orderService.accept(order.getId(), seller.getId());
-        changeDeadline(order.getPostId(), LocalDateTime.now().minusHours(1));
+        changeDeadline(order.getPostId(), LocalDateTime.now(BEIJING).minusHours(1));
 
         orderService.notifyDeadlineElapsed(order.getId());
         assertTrue(expiryNotices(publisher).isEmpty());
@@ -143,7 +148,7 @@ class BountyExpiryFlowTest {
         User publisher = register("expiry_invalid_date");
         wallet.recharge(publisher.getId(), BALANCE);
         var result = post("/api/trade/posts", publisher,
-                request("悬赏到期测试：过去截止时间", LocalDateTime.now().minusHours(1)));
+                request("悬赏到期测试：过去截止时间", LocalDateTime.now(BEIJING).minusMinutes(1)));
         assertNotEquals(0, code(result));
         assertTrue(postService.hallMine(publisher.getId()).isEmpty());
         assertWallet(publisher, BALANCE, BigDecimal.ZERO);
@@ -164,7 +169,7 @@ class BountyExpiryFlowTest {
     }
 
     private TradeOrder publish(User publisher, String title) {
-        var post = postService.publish(publisher.getId(), request(title, LocalDateTime.now().plusHours(1)));
+        var post = postService.publish(publisher.getId(), request(title, LocalDateTime.now(BEIJING).plusHours(1)));
         return orders.findByPostId(post.getId()).orElseThrow();
     }
 
@@ -175,7 +180,9 @@ class BountyExpiryFlowTest {
     }
 
     private Map<?, ?> post(String path, User operator, Object body) {
-        return Objects.requireNonNull(rest.postForObject(url(path), new HttpEntity<>(body, auth(operator)), Map.class));
+        HttpHeaders headers = auth(operator);
+        if (path.equals("/api/trade/posts")) headers.set("Idempotency-Key", UUID.randomUUID().toString());
+        return Objects.requireNonNull(rest.postForObject(url(path), new HttpEntity<>(body, headers), Map.class));
     }
 
     private int code(Map<?, ?> response) {

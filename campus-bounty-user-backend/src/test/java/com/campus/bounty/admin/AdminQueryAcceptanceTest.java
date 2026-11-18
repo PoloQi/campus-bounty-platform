@@ -15,6 +15,8 @@ import com.campus.bounty.user.UserService;
 import com.campus.bounty.wallet.WalletRepository;
 import com.campus.bounty.wallet.WalletService;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.resttestclient.TestRestTemplate;
 import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRestTemplate;
@@ -26,10 +28,12 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -37,6 +41,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -75,6 +80,10 @@ class AdminQueryAcceptanceTest {
     UserRepository userRepository;
     @Autowired
     JwtUtil jwtUtil;
+    @Autowired
+    ReportRepository reportRepository;
+    @Autowired
+    JdbcClient jdbc;
 
     private final AtomicInteger seq = new AtomicInteger();
 
@@ -136,6 +145,7 @@ class AdminQueryAcceptanceTest {
         assertEquals(order.getId().longValue(), ((Number) row.get("id")).longValue());
         assertEquals("BOUNTY", row.get("type"), "列表要带出帖子类型，前端类型列依赖它");
         assertEquals("IN_PROGRESS", row.get("status"));
+        assertNull(row.get("openAppealId"));
         assertEquals(0, new BigDecimal("30.00").compareTo(new BigDecimal(String.valueOf(row.get("amount")))));
 
         Map<String, Object> none = (Map<String, Object>) data(
@@ -143,7 +153,12 @@ class AdminQueryAcceptanceTest {
         assertTrue(((List<?>) none.get("items")).isEmpty(), "该买家没有已完成订单，状态筛选应生效");
 
         // 订单进入纠纷后，详情里必须能看到这笔申诉，仲裁台靠它一屏取证
-        appealService.open(order.getId(), seller.getId(), "详情聚合验收用");
+        var appeal = appealService.open(order.getId(), seller.getId(), "详情聚合验收用");
+        Map<String, Object> disputedPage = data(
+                adminGet("/api/admin/orders?buyerId=" + buyer.getId() + "&status=DISPUTED"));
+        List<Map<String, Object>> disputedItems = (List<Map<String, Object>>) disputedPage.get("items");
+        assertEquals(1, disputedItems.size());
+        assertEquals(appeal.getId().longValue(), ((Number) disputedItems.get(0).get("openAppealId")).longValue());
         Map<String, Object> detail = (Map<String, Object>) data(adminGet("/api/admin/orders/" + order.getId()));
         for (String key : List.of("order", "post", "buyer", "seller", "logs", "appeals", "timeline")) {
             assertTrue(detail.containsKey(key), "详情必须聚合 " + key + "，仲裁台靠它一屏取证");
@@ -152,6 +167,49 @@ class AdminQueryAcceptanceTest {
         assertFalse(buyerView.containsKey("passwordHash"), "用户摘要绝不能带出 passwordHash");
         assertFalse(buyerView.containsKey("password"), "用户摘要绝不能带出 password");
         assertFalse(((List<?>) detail.get("appeals")).isEmpty(), "该单已有申诉记录，详情应带出");
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "POST, DELETE_POST, DELETE_POST",
+            "TRADE_POST, CLOSE_TRADE_POST, CLOSE_TRADE_POST",
+            "POST, BAN_USER, BAN_USER",
+            "TRADE_POST, BAN_USER, BAN_USER",
+            "USER, BAN_USER, BAN_USER",
+            "TRADE_POST, CLOSE-TRADE-POST, "
+    })
+    void migrated_audit_detail_supplies_historical_moderation_action(String targetType, String auditAction,
+                                                                    String expectedAction) {
+        long adminId = admin().getId();
+        var report = new Report();
+        report.setTargetType(targetType);
+        report.setTargetId(410L);
+        report.setReporterId(adminId);
+        report.setReason("历史举报");
+        report.setStatus("HANDLED");
+        report.setResult("VALID");
+        report.setHandlerId(adminId);
+        report.setHandledAt(LocalDateTime.now());
+        report.setHandleComment("旧管理端保留的处理意见");
+        long reportId = reportRepository.save(report).getId();
+        String detail = "处理举报#" + reportId + "（" + targetType + ":410）action=" + auditAction
+                + " result=VALID；历史治理记录";
+        jdbc.sql("""
+                insert into t_admin_log (admin_id, action, target_type, target_id, detail, created_at)
+                values (:admin, 'HANDLE_REPORT', 'REPORT', :report, :detail, :created)
+                """).param("admin", adminId).param("report", reportId).param("detail", detail)
+                .param("created", report.getHandledAt()).update();
+
+        Map<String, Object> result = data(adminGet("/api/admin/reports/" + reportId));
+        assertEquals("VALID", result.get("result"));
+        assertEquals(report.getHandleComment(), result.get("comment"));
+        assertEquals(expectedAction, result.get("moderationAction"));
+        Map<String, Object> page = data(adminGet("/api/admin/reports/query?status=HANDLED&targetType=" + targetType));
+        List<Map<String, Object>> items = (List<Map<String, Object>>) page.get("items");
+        Map<String, Object> row = items.stream()
+                .filter(item -> ((Number) item.get("id")).longValue() == reportId)
+                .findFirst().orElseThrow();
+        assertEquals(expectedAction, row.get("moderationAction"));
     }
 
     @Test

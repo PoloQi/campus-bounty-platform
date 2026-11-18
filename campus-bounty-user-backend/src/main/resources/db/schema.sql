@@ -18,8 +18,8 @@ CREATE TABLE IF NOT EXISTS t_user (
 CREATE TABLE IF NOT EXISTS wallet (
     id BIGINT NOT NULL AUTO_INCREMENT,
     user_id BIGINT NOT NULL,
-    balance DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
-    frozen DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+    balance DECIMAL(30, 2) NOT NULL DEFAULT 0.00,
+    frozen DECIMAL(30, 2) NOT NULL DEFAULT 0.00,
     PRIMARY KEY (id),
     CONSTRAINT uk_wallet_user_id UNIQUE (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS wallet (
 CREATE TABLE IF NOT EXISTS trade_post (
     id BIGINT NOT NULL AUTO_INCREMENT,
     publisher_id BIGINT NOT NULL,
+    publish_request_id VARCHAR(36) NULL,
     type VARCHAR(16) NOT NULL DEFAULT 'BOUNTY',
     title VARCHAR(80) NOT NULL,
     description VARCHAR(1000) NOT NULL,
@@ -37,6 +38,7 @@ CREATE TABLE IF NOT EXISTS trade_post (
     status VARCHAR(16) NOT NULL DEFAULT 'OPEN',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
+    CONSTRAINT uk_trade_post_publish_request UNIQUE (publisher_id, publish_request_id),
     INDEX idx_trade_post_publisher (publisher_id, id),
     INDEX idx_trade_post_hall (status, type, category, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -46,11 +48,13 @@ CREATE TABLE IF NOT EXISTS trade_order (
     post_id BIGINT NOT NULL,
     buyer_id BIGINT NOT NULL,
     seller_id BIGINT NULL,
+    purchase_request_id VARCHAR(36) NULL,
     amount DECIMAL(10, 2) NOT NULL,
     status VARCHAR(16) NOT NULL DEFAULT 'PENDING',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
+    CONSTRAINT uk_trade_order_purchase_request UNIQUE (post_id, buyer_id, purchase_request_id),
     INDEX idx_trade_order_post (post_id, status),
     INDEX idx_trade_order_buyer (buyer_id, id),
     INDEX idx_trade_order_seller (seller_id, id),
@@ -62,7 +66,7 @@ CREATE TABLE IF NOT EXISTS wallet_log (
     user_id BIGINT NOT NULL,
     type VARCHAR(16) NOT NULL,
     amount DECIMAL(10, 2) NOT NULL,
-    balance_after DECIMAL(10, 2) NOT NULL,
+    balance_after DECIMAL(30, 2) NOT NULL,
     order_id BIGINT NULL,
     remark VARCHAR(100) NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -120,7 +124,7 @@ CREATE TABLE IF NOT EXISTS t_notification (
     id BIGINT NOT NULL AUTO_INCREMENT,
     user_id BIGINT NOT NULL,
     type VARCHAR(24) NOT NULL,
-    content VARCHAR(200) NOT NULL,
+    content VARCHAR(300) NOT NULL,
     ref_id BIGINT NULL,
     is_read BOOLEAN NOT NULL DEFAULT FALSE,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -148,6 +152,10 @@ CREATE TABLE IF NOT EXISTS t_report (
     reason VARCHAR(200) NOT NULL,
     status VARCHAR(16) NOT NULL DEFAULT 'PENDING',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    handler_id BIGINT NULL,
+    handled_at DATETIME NULL,
+    result VARCHAR(16) NULL,
+    handle_comment VARCHAR(500) NULL,
     PRIMARY KEY (id),
     INDEX idx_report_status (status, id),
     INDEX idx_report_target (target_type, target_id, id)
@@ -172,26 +180,17 @@ CREATE TABLE IF NOT EXISTS t_appeal (
     INDEX idx_appeal_status (status, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS t_report_resolution (
-    report_id BIGINT NOT NULL,
-    result VARCHAR(16) NOT NULL,
-    comment VARCHAR(500) NOT NULL,
-    admin_id BIGINT NOT NULL,
-    handled_at DATETIME NOT NULL,
-    moderation_action VARCHAR(24) NULL,
-    PRIMARY KEY (report_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS admin_log (
+CREATE TABLE IF NOT EXISTS t_admin_log (
     id BIGINT NOT NULL AUTO_INCREMENT,
     admin_id BIGINT NOT NULL,
     action VARCHAR(24) NOT NULL,
-    target_type VARCHAR(16) NOT NULL,
-    target_id BIGINT NOT NULL,
-    details VARCHAR(1000) NOT NULL,
-    created_at DATETIME NOT NULL,
+    target_type VARCHAR(24) NULL,
+    target_id BIGINT NULL,
+    detail VARCHAR(500) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     INDEX idx_admin_log_admin (admin_id, id),
     INDEX idx_admin_log_action (action, id),
+    INDEX idx_admin_log_created_at (created_at),
     INDEX idx_admin_log_target (target_type, target_id, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

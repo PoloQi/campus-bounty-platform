@@ -24,13 +24,12 @@ import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRe
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Profile;
-import org.springframework.core.annotation.AnnotationUtils;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -40,9 +39,9 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -75,6 +74,8 @@ class AdminServiceTest {
     TradeOrderService orders;
     @Autowired
     WalletService wallets;
+    @Autowired
+    JdbcTemplate jdbc;
 
     @Test
     void only_admin_can_delete_community_post() {
@@ -109,13 +110,14 @@ class AdminServiceTest {
     @Test
     void student_can_report_but_only_admin_can_list_pending_reports() {
         User student = register("admin_report_student");
+        Post post = createPost(student, "可举报的帖子");
 
-        adminService.report(student.getId(), "POST", 321L, "垃圾广告");
+        adminService.report(student.getId(), "POST", post.getId(), "垃圾广告");
 
         assertThrows(BizException.class, () -> adminService.pendingReports(student.getId()));
         List<Report> reports = adminService.pendingReports(admin().getId());
         assertTrue(reports.stream().anyMatch(report -> report.getReporterId().equals(student.getId())
-                && report.getTargetId().equals(321L) && report.getStatus().equals("PENDING")));
+                && report.getTargetId().equals(post.getId()) && report.getStatus().equals("PENDING")));
     }
 
     @Test
@@ -150,11 +152,22 @@ class AdminServiceTest {
     }
 
     @Test
-    void demo_admin_is_only_created_for_local_and_test_profiles() {
-        Profile profile = AnnotationUtils.findAnnotation(AdminBootstrap.class, Profile.class);
+    void report_targets_must_exist_and_peer_summary_exposes_only_public_fields() {
+        User reporter = register("report_target_student");
+        User peer = register("report_target_peer");
+        for (String type : List.of("POST", "TRADE_POST", "USER")) {
+            BizException failure = assertThrows(BizException.class,
+                    () -> adminService.report(reporter.getId(), type, Long.MAX_VALUE, "不存在"));
+            assertEquals("举报对象不存在", failure.getMessage());
+        }
 
-        assertNotNull(profile);
-        assertArrayEquals(new String[]{"local", "test"}, profile.value());
+        Map<?, ?> summary = (Map<?, ?>) read(reporter, "/api/users/" + peer.getId() + "/summary");
+        assertEquals(peer.getId().longValue(), ((Number) summary.get("id")).longValue());
+        assertEquals(peer.getNickname(), summary.get("nickname"));
+        assertTrue(!summary.containsKey("contact") && !summary.containsKey("username") && !summary.containsKey("passwordHash"));
+        assertEquals(0, code(write(reporter, "/api/reports",
+                Map.of("targetType", "USER", "targetId", peer.getId(), "reason", "用户举报"))));
+        assertThrows(BizException.class, () -> adminService.report(reporter.getId(), "USER", peer.getId(), "重复"));
     }
 
     @Test
@@ -175,7 +188,8 @@ class AdminServiceTest {
         assertEquals(0, code(write(admin, validPath, Map.of("result", "VALID", "comment", "确认广告", "moderate", true))));
         assertTrue(code(write(admin, validPath, Map.of("result", "VALID", "comment", "重复"))) != 0);
         assertTrue(code(write(admin, rejectedPath, Map.of("result", "REJECTED", "comment", "无违规", "moderate", true))) != 0);
-        assertEquals(0, code(write(admin, rejectedPath, Map.of("result", "REJECTED", "comment", "无违规"))));
+        String longOpinion = "无违规" + "说明".repeat(78) + "。";
+        assertEquals(0, code(write(admin, rejectedPath, Map.of("result", "REJECTED", "comment", longOpinion))));
 
         assertEquals("DELETED", postRepository.findById(removed.getId()).orElseThrow().getStatus());
         assertEquals("VISIBLE", postRepository.findById(kept.getId()).orElseThrow().getStatus());
@@ -183,13 +197,49 @@ class AdminServiceTest {
         assertEquals("HANDLED", resolved.get("status"));
         assertEquals("DELETE_POST", resolved.get("moderationAction"));
         assertEquals("确认广告", resolved.get("comment"));
+        assertEquals(admin.getId().longValue(), ((Number) resolved.get("adminId")).longValue());
+        assertNotNull(resolved.get("handledAt"));
         List<Map<?, ?>> notices = (List<Map<?, ?>>) read(reporter, "/api/notify");
         assertEquals(2L, notices.stream().filter(notice -> "REPORT_HANDLED".equals(notice.get("type"))).count());
         assertTrue(notices.stream().anyMatch(notice -> String.valueOf(notice.get("content")).contains("确认广告")));
-        assertTrue(notices.stream().anyMatch(notice -> String.valueOf(notice.get("content")).contains("无违规")));
+        assertTrue(notices.stream().anyMatch(notice -> {
+            String content = String.valueOf(notice.get("content"));
+            return content.contains("处理人：管理员 #" + admin.getId()) && content.endsWith(longOpinion);
+        }));
         List<Map<?, ?>> audit = items(read(admin, "/api/admin/audit?adminId=" + admin.getId() + "&action=HANDLE_REPORT"));
         assertEquals(1L, audit.stream().filter(log -> ((Number) log.get("targetId")).longValue() == valid).count());
         assertTrue(audit.stream().anyMatch(log -> ((Number) log.get("targetId")).longValue() == rejected));
+    }
+
+    @Test
+    void shared_schema_history_is_visible_in_report_and_audit_apis() {
+        User reporter = register("shared_report_history");
+        User admin = admin();
+        long targetId = createPost(reporter, "共享库历史举报").getId();
+        adminService.report(reporter.getId(), "POST", targetId, "旧库举报");
+        long reportId = jdbc.queryForObject(
+                "select id from t_report where reporter_id = ? and target_id = ?", Long.class,
+                reporter.getId(), targetId);
+        jdbc.update("""
+                update t_report set status = 'HANDLED', handler_id = ?, handled_at = current_timestamp,
+                    result = 'REJECTED', handle_comment = '旧库处理意见' where id = ?
+                """, admin.getId(), reportId);
+        jdbc.update("""
+                insert into t_admin_log (admin_id, action, target_type, target_id, detail, created_at)
+                values (?, 'HANDLE_REPORT', 'REPORT', ?, null, current_timestamp)
+                """, admin.getId(), reportId);
+
+        Map<?, ?> report = (Map<?, ?>) read(admin, "/api/admin/reports/" + reportId);
+        assertEquals("REJECTED", report.get("result"));
+        assertEquals("旧库处理意见", report.get("comment"));
+        assertEquals(admin.getId().longValue(), ((Number) report.get("adminId")).longValue());
+        assertNotNull(report.get("handledAt"));
+        assertNull(report.get("moderationAction"));
+
+        Map<?, ?> audit = items(read(admin, "/api/admin/audit?action=HANDLE_REPORT")).stream()
+                .filter(log -> ((Number) log.get("targetId")).longValue() == reportId)
+                .findFirst().orElseThrow();
+        assertNull(audit.get("details"));
     }
 
     @Test

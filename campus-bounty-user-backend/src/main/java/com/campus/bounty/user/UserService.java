@@ -3,6 +3,7 @@ package com.campus.bounty.user;
 import com.campus.bounty.common.BizException;
 import com.campus.bounty.user.dto.UpdateProfileReq;
 import com.campus.bounty.user.dto.UserProfileResp;
+import com.campus.bounty.user.dto.UserSummaryResp;
 import com.campus.bounty.wallet.Wallet;
 import com.campus.bounty.wallet.WalletRepository;
 import lombok.RequiredArgsConstructor;
@@ -10,9 +11,13 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
+
 @Service
 @RequiredArgsConstructor
 public class UserService {
+    private static final int BCRYPT_MAX_PASSWORD_BYTES = 72;
+
     private final UserRepository userRepository;
     private final WalletRepository walletRepository;
     private final PasswordEncoder passwordEncoder;
@@ -21,6 +26,9 @@ public class UserService {
     public User register(String username, String password, String confirmPassword, String nickname) {
         if (!password.equals(confirmPassword)) {
             throw new BizException("两次输入的密码不一致");
+        }
+        if (password.getBytes(StandardCharsets.UTF_8).length > BCRYPT_MAX_PASSWORD_BYTES) {
+            throw new BizException("密码不能超过 72 个 UTF-8 字节");
         }
         if (userRepository.existsByUsername(username)) {
             throw new BizException("用户名已存在");
@@ -40,6 +48,11 @@ public class UserService {
 
     public UserProfileResp profile(Long userId) {
         return UserProfileResp.from(userRepository.findById(userId)
+                .orElseThrow(() -> new BizException("用户不存在")));
+    }
+
+    public UserSummaryResp summary(Long userId) {
+        return UserSummaryResp.from(userRepository.findById(userId)
                 .orElseThrow(() -> new BizException("用户不存在")));
     }
 

@@ -24,9 +24,9 @@ public class Wallet {
     @Column(name = "user_id", nullable = false)
     private Long userId;
 
-    @Column(nullable = false, precision = 10, scale = 2)
+    @Column(nullable = false, precision = 30, scale = 2)
     private BigDecimal balance = BigDecimal.ZERO;
 
-    @Column(nullable = false, precision = 10, scale = 2)
+    @Column(nullable = false, precision = 30, scale = 2)
     private BigDecimal frozen = BigDecimal.ZERO;
 }

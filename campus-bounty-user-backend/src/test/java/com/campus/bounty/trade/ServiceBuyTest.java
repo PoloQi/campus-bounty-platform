@@ -3,6 +3,7 @@ package com.campus.bounty.trade;
 import com.campus.bounty.admin.AdminService;
 import com.campus.bounty.common.BizException;
 import com.campus.bounty.config.JwtUtil;
+import com.campus.bounty.notification.NotificationRepository;
 import com.campus.bounty.trade.dto.OrderDetailView;
 import com.campus.bounty.trade.dto.ServicePublishReq;
 import com.campus.bounty.user.User;
@@ -25,6 +26,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
@@ -33,6 +35,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -63,6 +66,8 @@ class ServiceBuyTest {
     AdminService adminService;
     @Autowired
     UserRepository userRepository;
+    @Autowired
+    NotificationRepository notifications;
     @Autowired
     TransactionTemplate transactions;
 
@@ -161,6 +166,48 @@ class ServiceBuyTest {
     }
 
     @Test
+    void concurrent_http_retries_create_one_order_and_new_request_can_repurchase() throws Exception {
+        User publisher = register("service_buy_retry_publisher");
+        User buyer = register("service_buy_retry_buyer");
+        walletService.recharge(buyer.getId(), new BigDecimal("45.00"));
+        TradePost post = publish(publisher, "20.00");
+        String requestId = UUID.randomUUID().toString();
+        String path = "/api/trade/posts/" + post.getId() + "/buy";
+
+        assertEquals(HttpStatus.BAD_REQUEST, buy(path, buyer, null).getStatusCode());
+        assertEquals(HttpStatus.BAD_REQUEST, buy(path, buyer, "not-a-uuid").getStatusCode());
+
+        var executor = Executors.newFixedThreadPool(2);
+        long orderId;
+        try {
+            var start = new CountDownLatch(1);
+            var first = executor.submit(() -> { start.await(); return buy(path, buyer, requestId); });
+            var retry = executor.submit(() -> { start.await(); return buy(path, buyer, requestId); });
+            start.countDown();
+            orderId = purchasedOrderId(first.get(5, TimeUnit.SECONDS));
+            assertEquals(orderId, purchasedOrderId(retry.get(5, TimeUnit.SECONDS)));
+        } finally {
+            executor.shutdownNow();
+        }
+        assertEquals(1, orderService.ordersAsBuyer(buyer.getId()).size());
+        assertEquals(0, walletService.getOrCreate(buyer.getId()).getFrozen().compareTo(new BigDecimal("20.00")));
+        assertEquals(1, walletService.logs(buyer.getId()).stream().filter(log -> log.getType().equals("FREEZE")).count());
+        assertEquals(1, notifications.findByUserIdOrderByIdDesc(publisher.getId()).stream()
+                .filter(notice -> notice.getType().equals("ORDER_CREATED")).count());
+
+        var independent = buy(path, buyer, UUID.randomUUID().toString());
+        assertNotEquals(orderId, purchasedOrderId(independent));
+        assertEquals(2, orderService.ordersAsBuyer(buyer.getId()).size());
+
+        User admin = register("service_buy_retry_admin");
+        admin.setRole("ADMIN");
+        userRepository.save(admin);
+        adminService.closeTradePost(admin.getId(), post.getId());
+        assertEquals(orderId, purchasedOrderId(buy(path, buyer, requestId)));
+        assertEquals(2, orderService.ordersAsBuyer(buyer.getId()).size());
+    }
+
+    @Test
     void buyer_can_buy_and_read_order_detail_over_http_but_outsider_cannot() {
         User publisher = register("service_buy_http_publisher");
         User buyer = register("service_buy_http_buyer");
@@ -168,11 +215,8 @@ class ServiceBuyTest {
         TradePost post = publish(publisher, "12.00");
         walletService.recharge(buyer.getId(), new BigDecimal("20.00"));
 
-        ResponseEntity<Map> bought = rest.postForEntity(url("/api/trade/posts/" + post.getId() + "/buy"),
-                new HttpEntity<>(authHeaders(buyer)), Map.class);
-        assertEquals(HttpStatus.OK, bought.getStatusCode());
-        assertEquals(0, code(bought));
-        long orderId = ((Number) ((Map<String, Object>) bought.getBody().get("data")).get("id")).longValue();
+        var bought = buy("/api/trade/posts/" + post.getId() + "/buy", buyer, UUID.randomUUID().toString());
+        long orderId = purchasedOrderId(bought);
 
         ResponseEntity<Map> detail = rest.exchange(url("/api/trade/orders/" + orderId),
                 HttpMethod.GET, new HttpEntity<>(authHeaders(buyer)), Map.class);
@@ -208,6 +252,20 @@ class ServiceBuyTest {
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(jwtUtil.generate(user.getId(), user.getUsername()));
         return headers;
+    }
+
+    private ResponseEntity<Map> buy(String path, User buyer, String requestId) {
+        var headers = authHeaders(buyer);
+        if (requestId != null) headers.set("Idempotency-Key", requestId);
+        return rest.postForEntity(url(path), new HttpEntity<>(headers), Map.class);
+    }
+
+    private long purchasedOrderId(ResponseEntity<Map> response) {
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(0, code(response));
+        var order = (Map<?, ?>) response.getBody().get("data");
+        assertFalse(order.containsKey("purchaseRequestId"));
+        return ((Number) order.get("id")).longValue();
     }
 
     private String url(String path) {

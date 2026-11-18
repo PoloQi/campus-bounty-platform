@@ -11,6 +11,8 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 public class WalletService {
+    private static final BigDecimal MAX_SINGLE_AMOUNT = new BigDecimal("99999999.99");
+
     private final WalletRepository walletRepository;
     private final WalletLogRepository walletLogRepository;
 
@@ -101,6 +103,9 @@ public class WalletService {
     private void validateAmount(BigDecimal amount) {
         if (amount == null || amount.signum() <= 0 || amount.stripTrailingZeros().scale() > 2) {
             throw new BizException("金额必须大于 0 且最多两位小数");
+        }
+        if (amount.compareTo(MAX_SINGLE_AMOUNT) > 0) {
+            throw new BizException("单笔金额不能超过 " + MAX_SINGLE_AMOUNT.toPlainString());
         }
     }
 }

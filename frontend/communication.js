@@ -122,8 +122,10 @@ function postCard(ctx, post, { detail = false, view = '' } = {}) {
     (mine ? '<a class="button quiet" href="' + path('edit-post',id) + '">编辑</a><button class="button quiet comm-danger-text" data-delete type="button">删除</button>' :
       (author ? '<a class="button quiet" href="' + path('messages',author) + '">私信</a>' : '') +
       '<button class="button quiet" data-report type="button">举报</button>') + '</div>';
+  const authorName = esc(displayName(post));
+  const authorLabel = detail && author && !mine ? '<a href="' + path('reviews', author) + '">' + authorName + '</a>' : authorName;
   return '<article class="panel comm-post" data-post-id="' + id + '"><header class="comm-byline">' + avatar(post) +
-    '<div><strong>' + esc(displayName(post)) + '</strong><p class="muted">' + dateLabel(post) + '</p></div>' +
+    '<div><strong>' + authorLabel + '</strong><p class="muted">' + dateLabel(post) + '</p></div>' +
     (visible ? (!detail ? '<a class="comm-detail-link" href="' + href + '">查看详情 ' + icon('upRight',15) + '</a>' : '') :
      '<span class="badge comm-deleted">已删除</span>') + '</header>' + body + media +
     (snippets.length ? '<div class="comm-post-tags">' + snippets.join('') + '</div>' : '') + (visible ? actions : '') + '</article>';
@@ -180,7 +182,7 @@ async function community(ctx) {
       '># ' + label + '</a>').join('') + '</div></section>') +
     '<a class="panel comm-inbox-link" href="' + path('messages') + '">' + icon('chat',20) +
     '<span>一对一私信</span>' + icon('right',15) + '</a></aside>';
-  if (!ctx.show(heading('校园社区','分享校园日常，认识一起学习和活动的同学。',
+  if (!await ctx.show(heading('校园社区','分享校园日常，认识一起学习和活动的同学。',
     '<a class="button" href="' + composeURL + '">' + icon('plus',18) + '发布帖子</a>') +
     tabs(view, tag) + '<div class="comm-layout"><section class="comm-feed" aria-labelledby="feed-title">' +
     '<div class="comm-section"><h2 id="feed-title">' + title + '</h2>' +
@@ -201,7 +203,7 @@ async function community(ctx) {
 async function postDetail(ctx) {
   const id = idOf(ctx.args[0]);
   const back = '<a class="button secondary" href="' + feedLink() + '">返回社区</a>';
-  if (!ctx.show('<div class="comm-reader">' + heading('帖子详情','',back) + '<div class="comm-detail" data-detail>' + status('正在加载帖子…') + '</div></div>')) return;
+  if (!await ctx.show('<div class="comm-reader">' + heading('帖子详情','',back) + '<div class="comm-detail" data-detail>' + status('正在加载帖子…') + '</div></div>')) return;
   const region = ctx.main.querySelector('[data-detail]');
   if (!id) {
     region.innerHTML = status('帖子编号无效。');
@@ -287,7 +289,7 @@ async function postEditor(ctx) {
   const id = idOf(ctx.args[0]);
   const back = '<a href="' + (editing && id ? path('post',id) : feedLink()) + '" class="button secondary">取消</a>';
   const title = editing ? '编辑帖子' : '发布帖子';
-  if (!ctx.show(heading(title,'',back) + '<section class="panel comm-editor" data-editor>' + status('正在加载…') + '</section>')) return;
+  if (!await ctx.show(heading(title,'',back) + '<section class="panel comm-editor" data-editor>' + status('正在加载…') + '</section>')) return;
   const editor = ctx.main.querySelector('[data-editor]');
   let post;
   if (editing) {
@@ -371,14 +373,15 @@ function notificationCard(n) {
 async function notifications(ctx) {
   const unreadOnly = ctx.query.get('view') === 'unread';
   const base = path('notifications');
-  if (!ctx.show(heading('站内通知','查看交易进度和平台消息。') +
+  if (!await ctx.show(heading('站内通知','查看交易进度和平台消息。') +
     '<div class="comm-detail"><nav class="comm-tabs" aria-label="通知筛选"><a href="' + base + '"' +
     (unreadOnly ? '' : ' aria-current="page"') + '>全部通知</a><a href="' + base + '?view=unread"' +
     (unreadOnly ? ' aria-current="page"' : '') + '>未读</a></nav><div class="comm-card-list" data-notifications>' +
     status('正在加载通知…') + '</div></div>')) return;
   const list = ctx.main.querySelector('[data-notifications]');
-  const items = await api('/api/notify',{signal:ctx.signal});
+  let items = await api('/api/notify',{signal:ctx.signal});
   if (ctx.signal.aborted) return;
+  ctx.syncNotifications(items);
   const marking = new Map();
   const render = () => {
     const filtered = unreadOnly ? items.filter(item => !item.read) : items;
@@ -386,9 +389,16 @@ async function notifications(ctx) {
       status(unreadOnly ? '没有未读通知。' : '暂时没有通知。');
   };
   window.addEventListener('notifications-refresh', event => {
+    const next = event.detail;
+    const newReadStates = new Map(next.map(item => [item.id,item.read]));
+    const changed = items.some(item => newReadStates.get(item.id) !== item.read);
     const knownIds = new Set(items.map(item => item.id));
-    const arrivals = event.detail.filter(item => !knownIds.has(item.id));
-    items.unshift(...arrivals);
+    const arrivals = next.filter(item => !knownIds.has(item.id));
+    items = next;
+    if (changed) {
+      render();
+      return;
+    }
     const visible = unreadOnly ? arrivals.filter(item => !item.read) : arrivals;
     if (!visible.length) return;
     list.querySelector('.comm-empty')?.remove();
@@ -398,11 +408,14 @@ async function notifications(ctx) {
     if (item.read) return;
     if (!marking.has(item.id)) {
       marking.set(item.id,api('/api/notify/' + item.id + '/read', { method:'POST',signal:ctx.signal })
-        .then(() => { item.read = true; })
+        .then(() => {
+          const current = items.find(notice => notice.id === item.id);
+          if (current) current.read = true;
+          ctx.syncNotifications(items);
+        })
         .finally(() => marking.delete(item.id)));
     }
     await marking.get(item.id);
-    ctx.refreshNotifications();
   }
   list.onclick = event => {
     const target = event.target.closest('[data-notification-target]');
@@ -427,22 +440,6 @@ async function notifications(ctx) {
   render();
 }
 
-function recentPeers(ctx) {
-  const key = 'campus:recent-conversations:' + ownerId(ctx);
-  let peers = [];
-  try {
-    const stored = JSON.parse(localStorage.getItem(key) ?? '[]');
-    if (Array.isArray(stored)) peers = stored.map(idOf).filter(Boolean);
-  } catch { /* Storage may be unavailable. The current view still works. */ }
-  return {
-    list() { return peers; },
-    remember(id) {
-      peers = [id,...peers.filter(item => item !== id)].slice(0,40);
-      try { localStorage.setItem(key,JSON.stringify(peers)); } catch { /* Local history is optional. */ }
-    },
-  };
-}
-
 function chatPanel(peer) {
   if (!peer) return '<section class="panel comm-chat-empty">' + icon('chat',28) +
     '<h2>从帖子或交易发起私信</h2><p class="muted">在帖子或交易详情中找到对方，就可以开始聊天。</p>' +
@@ -457,12 +454,14 @@ function chatPanel(peer) {
     '<button type="button" class="button secondary" data-reconnect hidden>重新连接</button></div></form></section>';
 }
 
-function messages(ctx) {
+async function messages(ctx) {
   const self = ownerId(ctx);
   const requested = idOf(ctx.args[0]);
   const peer = requested !== self ? requested : null;
-  const recent = recentPeers(ctx);
-  if (!ctx.show(heading('一对一私信','') +
+  const recent = new Map();
+  let conversationStatus = '正在加载最近会话…';
+  let conversationsRequested = false;
+  if (!await ctx.show(heading('一对一私信','') +
     '<div class="comm-layout comm-chat"><aside class="panel comm-chat-sidebar">' +
     '<nav aria-label="最近会话"><h2>最近会话</h2><div data-peers></div></nav>' +
     '<details class="comm-peer-picker"><summary>按用户编号打开会话</summary>' +
@@ -471,10 +470,31 @@ function messages(ctx) {
     '</aside>' + chatPanel(peer) + '</div>')) return;
   const peerLinks = ctx.main.querySelector('[data-peers]');
   function renderPeers() {
-    const known = recent.list();
+    const known = [...recent.keys()].sort((a,b) => recent.get(b) - recent.get(a));
     const visible = peer && !known.includes(peer) ? [peer,...known] : known;
     peerLinks.innerHTML = visible.length ? visible.map(id => '<a href="' + path('messages',id) + '"' +
-      (id === peer ? ' aria-current="page"' : '') + '>' + esc(peerLabel(id)) + icon('right',16) + '</a>').join('') : '<p class="muted">还没有最近会话。</p>';
+      (id === peer ? ' aria-current="page"' : '') + '>' + esc(peerLabel(id)) + icon('right',16) + '</a>').join('') :
+      '<p class="muted">' + conversationStatus + '</p>';
+  }
+  function rememberPeer(id, lastMessageId) {
+    if (!id || id === self || !lastMessageId || lastMessageId <= (recent.get(id) ?? 0)) return false;
+    recent.set(id,lastMessageId);
+    return true;
+  }
+  async function loadConversations() {
+    conversationsRequested = true;
+    try {
+      const conversations = await api('/api/chat/conversations',{signal:ctx.signal});
+      if (!live()) return;
+      for (const conversation of conversations) {
+        rememberPeer(idOf(conversation.peerId),idOf(conversation.lastMessageId));
+      }
+      conversationStatus = '还没有最近会话。';
+    } catch {
+      if (!live()) return;
+      conversationStatus = '最近会话加载失败，请重新打开私信。';
+    }
+    renderPeers();
   }
   renderPeers();
   ctx.main.querySelector('[data-peer-picker]').onsubmit = event => {
@@ -521,10 +541,7 @@ function messages(ctx) {
   async function loadHistory() {
     const list = await api('/api/chat/history?withUserId=' + peer,{signal:ctx.signal});
     if (!live()) return;
-    if (list.length && recent.list()[0] !== peer) {
-      recent.remember(peer);
-      renderPeers();
-    }
+    if (rememberPeer(peer,idOf(list.at(-1)?.id))) renderPeers();
     for (const item of list) savedMessages.set(idOf(item.id),item);
     showHistory();
   }
@@ -556,6 +573,7 @@ function messages(ctx) {
     if (!live() || socket?.readyState === WebSocket.CONNECTING || connected()) return;
     const token = sessionToken();
     if (!token) {
+      void loadConversations();
       if (peer) loadHistory().catch(showHistoryError);
       return;
     }
@@ -568,16 +586,19 @@ function messages(ctx) {
     } catch (err) {
       setState('连接失败',true);
       onFailure(err);
+      if (!conversationsRequested) void loadConversations();
       if (peer && !historyLoaded) loadHistory().catch(showHistoryError);
       return;
     }
     socket.onopen = () => {
       setState('实时连接已建立');
+      void loadConversations();
       if (peer) loadHistory().catch(showHistoryError);
     };
     socket.onclose = () => {
       const uncertain = pending && inputError('连接已断开。请刷新记录确认消息是否已保存。');
       finishSend(uncertain);
+      if (!conversationsRequested) void loadConversations();
       if (peer && !historyLoaded) loadHistory().catch(showHistoryError);
     };
     socket.onmessage = event => {
@@ -586,9 +607,9 @@ function messages(ctx) {
       try { frame = JSON.parse(event.data); } catch { return; }
       if (!frame || typeof frame !== 'object') return;
       if (frame.action === 'ACK') {
-        if (idOf(frame.fromId) !== self || idOf(frame.toId) !== peer || !idOf(frame.id)) return;
-        recent.remember(peer);
-        renderPeers();
+        const messageId = idOf(frame.id);
+        if (idOf(frame.fromId) !== self || idOf(frame.toId) !== peer || !messageId) return;
+        if (rememberPeer(peer,messageId)) renderPeers();
         showSavedMessage(frame);
         if (pending?.requestId === frame.requestId) {
           if (form.elements.message.value.trim() === pending.text) form.reset();
@@ -601,11 +622,13 @@ function messages(ctx) {
         return;
       }
       const sender = idOf(frame.fromId);
-      if (!sender) return;
-      recent.remember(sender);
-      renderPeers();
-      if (sender === peer) showSavedMessage(frame);
-      else toast('收到' + peerLabel(sender) + '的私信');
+      const receiver = idOf(frame.toId);
+      const other = sender === self ? receiver : receiver === self ? sender : null;
+      const messageId = idOf(frame.id);
+      if (!other || other === self || !messageId) return;
+      if (rememberPeer(other,messageId)) renderPeers();
+      if (other === peer) showSavedMessage(frame);
+      else if (sender !== self) toast('收到' + peerLabel(sender) + '的私信');
     };
   }
   ctx.signal.addEventListener('abort',() => {

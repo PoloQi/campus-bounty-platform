@@ -16,7 +16,7 @@ public class ChatService {
 
     @Transactional
     public Message save(Long fromId, Long toId, String content) {
-        if (userRepository.findActiveRole(fromId).isEmpty()) {
+        if (!isActive(fromId)) {
             throw new BizException(40301, "账号不可用");
         }
         if (content == null || content.isBlank()) {
@@ -37,5 +37,13 @@ public class ChatService {
 
     public List<Message> history(Long meId, Long otherId) {
         return messageRepository.conversation(meId, otherId);
+    }
+
+    public List<MessageRepository.ConversationSummary> recentConversations(Long userId) {
+        return messageRepository.recentConversations(userId);
+    }
+
+    boolean isActive(Long userId) {
+        return userRepository.findActiveRole(userId).isPresent();
     }
 }

@@ -23,8 +23,13 @@ import org.springframework.test.context.ActiveProfiles;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -38,6 +43,7 @@ class PublishBountyTest {
     @Autowired TradePostService tradePostService;
     @Autowired TradePostRepository postRepository;
     @Autowired TradeOrderRepository orderRepository;
+    @Autowired TradeOrderService orderService;
     @Autowired WalletService walletService;
     @Autowired UserService userService;
     @Autowired JwtUtil jwtUtil;
@@ -90,10 +96,7 @@ class PublishBountyTest {
     void authenticated_user_can_publish_over_http() {
         User user = register("publish_bounty_http");
         walletService.recharge(user.getId(), new BigDecimal("30.00"));
-        HttpHeaders headers = authHeaders(user);
-
-        ResponseEntity<Map> response = rest.postForEntity(url("/api/trade/posts"),
-                new HttpEntity<>(request("12.50"), headers), Map.class);
+        ResponseEntity<Map> response = publish(user, request("12.50"), UUID.randomUUID().toString());
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals(0, code(response));
@@ -110,8 +113,7 @@ class PublishBountyTest {
         PublishReq invalid = request("1.00");
         invalid.setCategory(null);
 
-        ResponseEntity<Map> invalidResponse = rest.postForEntity(url("/api/trade/posts"),
-                new HttpEntity<>(invalid, authHeaders(user)), Map.class);
+        ResponseEntity<Map> invalidResponse = publish(user, invalid, UUID.randomUUID().toString());
         assertEquals(HttpStatus.OK, invalidResponse.getStatusCode());
         assertEquals(40000, code(invalidResponse));
 
@@ -119,6 +121,68 @@ class PublishBountyTest {
                 request("1.00"), Map.class);
         assertEquals(HttpStatus.UNAUTHORIZED, unauthorized.getStatusCode());
         assertEquals(40100, code(unauthorized));
+    }
+
+    @Test
+    void concurrent_http_retries_freeze_once_and_replay_the_original_post_after_cancel() throws Exception {
+        User user = register("publish_bounty_retry");
+        walletService.recharge(user.getId(), new BigDecimal("65.00"));
+        PublishReq body = request("14.00");
+        String key = UUID.randomUUID().toString();
+        assertEquals(HttpStatus.BAD_REQUEST, publish(user, body, null).getStatusCode());
+        assertEquals(HttpStatus.BAD_REQUEST, publish(user, body, "not-a-uuid").getStatusCode());
+
+        var executor = Executors.newFixedThreadPool(2);
+        long postId;
+        try {
+            var start = new CountDownLatch(1);
+            var first = executor.submit(() -> { start.await(); return publish(user, body, key); });
+            var retry = executor.submit(() -> { start.await(); return publish(user, body, key); });
+            start.countDown();
+            postId = publishedId(first.get(5, TimeUnit.SECONDS));
+            assertEquals(postId, publishedId(retry.get(5, TimeUnit.SECONDS)));
+        } finally {
+            executor.shutdownNow();
+        }
+        assertEquals(1, tradePostService.hallMine(user.getId()).size());
+        assertEquals(1, orderService.ordersAsBuyer(user.getId()).size());
+        assertEquals(1, walletService.logs(user.getId()).stream().filter(log -> log.getType().equals("FREEZE")).count());
+        assertMoney("51.00", walletService.getOrCreate(user.getId()).getBalance());
+        assertMoney("14.00", walletService.getOrCreate(user.getId()).getFrozen());
+
+        long independent = publishedId(publish(user, body, UUID.randomUUID().toString()));
+        assertNotEquals(postId, independent);
+        var order = orderRepository.findByPostId(postId).orElseThrow();
+        orderService.cancel(order.getId(), user.getId());
+        body.setDeadline(BountyDeadline.now().minusMinutes(1));
+        assertEquals(postId, publishedId(publish(user, body, key)));
+        assertEquals(2, orderService.ordersAsBuyer(user.getId()).size());
+        assertMoney("14.00", walletService.getOrCreate(user.getId()).getFrozen());
+    }
+
+    @Test
+    void insufficient_balance_rolls_back_the_key_and_allows_retry_after_recharge() {
+        User user = register("bounty_retry_funds");
+        PublishReq body = request("14.00");
+        String key = UUID.randomUUID().toString();
+        assertEquals(40000, code(publish(user, body, key)));
+        assertEquals(0, tradePostService.hallMine(user.getId()).size());
+        walletService.recharge(user.getId(), new BigDecimal("20.00"));
+        assertEquals(user.getId(), postRepository.findById(publishedId(publish(user, body, key))).orElseThrow()
+                .getPublisherId());
+        assertMoney("14.00", walletService.getOrCreate(user.getId()).getFrozen());
+    }
+
+    private ResponseEntity<Map> publish(User user, PublishReq body, String key) {
+        HttpHeaders headers = authHeaders(user);
+        if (key != null) headers.set("Idempotency-Key", key);
+        return rest.postForEntity(url("/api/trade/posts"), new HttpEntity<>(body, headers), Map.class);
+    }
+
+    private long publishedId(ResponseEntity<Map> response) {
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(0, code(response));
+        return ((Number) response.getBody().get("data")).longValue();
     }
 
     private PublishReq request(String price) {

@@ -20,4 +20,9 @@ public class ChatController {
     public ApiResponse<List<Message>> history(@RequestParam Long withUserId) {
         return ApiResponse.ok(chatService.history(CurrentUser.id(), withUserId));
     }
+
+    @GetMapping("/conversations")
+    public ApiResponse<List<MessageRepository.ConversationSummary>> recentConversations() {
+        return ApiResponse.ok(chatService.recentConversations(CurrentUser.id()));
+    }
 }

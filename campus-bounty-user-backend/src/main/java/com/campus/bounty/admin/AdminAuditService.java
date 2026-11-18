@@ -12,7 +12,7 @@ public class AdminAuditService {
     private final EntityManager entityManager;
 
     @Transactional(propagation = Propagation.MANDATORY)
-    public void record(Long adminId, String action, String targetType, Long targetId, String details) {
-        entityManager.persist(new AdminLog(adminId, action, targetType, targetId, details));
+    public void record(Long adminId, String action, String targetType, Long targetId, String detail) {
+        entityManager.persist(new AdminLog(adminId, action, targetType, targetId, detail));
     }
 }

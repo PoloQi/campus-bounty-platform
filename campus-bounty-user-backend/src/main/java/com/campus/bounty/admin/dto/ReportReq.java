@@ -3,6 +3,7 @@ package com.campus.bounty.admin.dto;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
@@ -13,6 +14,7 @@ public class ReportReq {
     private String targetType;
 
     @NotNull(message = "举报对象ID不能为空")
+    @Positive(message = "举报对象ID不合法")
     private Long targetId;
 
     @NotBlank(message = "举报原因不能为空")

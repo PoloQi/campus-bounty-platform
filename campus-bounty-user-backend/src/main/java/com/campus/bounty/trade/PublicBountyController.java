@@ -7,7 +7,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.text.Normalizer;
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.regex.Pattern;
 
@@ -28,7 +27,7 @@ class PublicBountyController {
 
     @GetMapping(TITLES_PATH)
     public ApiResponse<List<String>> titles() {
-        List<String> titles = tradePosts.findTitles(PostType.BOUNTY, PostStatus.OPEN, LocalDateTime.now(), PageRequest.of(0, DISPLAY_LIMIT))
+        List<String> titles = tradePosts.findTitles(PostType.BOUNTY, PostStatus.OPEN, BountyDeadline.now(), PageRequest.of(0, DISPLAY_LIMIT))
                 .stream()
                 .filter(PublicBountyController::canDisplay)
                 .map(String::strip)

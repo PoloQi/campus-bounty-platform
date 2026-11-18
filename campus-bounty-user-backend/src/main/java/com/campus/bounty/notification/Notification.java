@@ -26,7 +26,7 @@ public class Notification {
     @Column(nullable = false, length = 24)
     private String type;
 
-    @Column(nullable = false, length = 200)
+    @Column(nullable = false, length = 300)
     private String content;
 
     @Column(name = "ref_id")

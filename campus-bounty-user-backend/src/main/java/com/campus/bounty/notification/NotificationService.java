@@ -14,11 +14,16 @@ public class NotificationService {
     private final NotificationRepository notificationRepository;
 
     public void push(Long userId, String type, String content, Long refId) {
+        push(userId, type, content, refId, LocalDateTime.now());
+    }
+
+    public void push(Long userId, String type, String content, Long refId, LocalDateTime createdAt) {
         Notification notification = new Notification();
         notification.setUserId(userId);
         notification.setType(type);
         notification.setContent(content);
         notification.setRefId(refId);
+        notification.setCreatedAt(createdAt);
         notificationRepository.save(notification);
     }
 

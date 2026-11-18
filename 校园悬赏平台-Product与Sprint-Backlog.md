@@ -2,7 +2,7 @@
 
 > 项目：**校园悬赏平台**（闲鱼式 C2C，学生之间发悬赏 / 挂牌服务 / 接单 / 担保交易 + 社区交流）
 > 团队：3 人（1 名全栈 + 2 名后端）　周期：**11 周（3 个 Sprint：4 + 4 + 3 周）**
-> 技术栈：Spring Boot 3 + Vue 3 + MySQL 8　部署：Docker 本地运行，CodeArts 托管
+> 技术栈：Java 17 + Spring Boot 4.1.2 + Vue 3 + MySQL 8　部署：Docker 本地运行，CodeArts 托管
 > 配套文档：设计规格 `docs/superpowers/specs/2026-10-11-校园悬赏平台-设计.md`；
 > 管理保障补充篇 `docs/superpowers/specs/2026-10-11-管理保障模块-设计.md`；
 > Sprint 1 实现计划 `docs/superpowers/plans/2026-10-11-sprint1-账户钱包与悬赏交易.md`；

@@ -72,6 +72,25 @@ class ConfirmSettleTest {
     }
 
     @Test
+    void confirm_credits_a_seller_at_the_legacy_balance_limit() {
+        User buyer = register("confirm_capacity_buyer");
+        User seller = register("confirm_capacity_seller");
+        TradeOrder order = newConfirmingOrder(buyer, seller, "结算超过旧余额上限");
+        walletService.recharge(seller.getId(), new BigDecimal("99999999.99"));
+
+        orderService.confirm(order.getId(), buyer.getId());
+
+        assertEquals(OrderStatus.COMPLETED, orderRepository.findById(order.getId()).orElseThrow().getStatus());
+        assertEquals(0, walletService.getOrCreate(buyer.getId()).getFrozen().compareTo(BigDecimal.ZERO));
+        BigDecimal expectedBalance = new BigDecimal("100000029.99");
+        assertEquals(0, walletService.getOrCreate(seller.getId()).getBalance().compareTo(expectedBalance));
+        WalletLog income = walletService.logs(seller.getId()).get(0);
+        assertEquals("INCOME", income.getType());
+        assertEquals(order.getId(), income.getOrderId());
+        assertEquals(0, income.getBalanceAfter().compareTo(expectedBalance));
+    }
+
+    @Test
     void confirm_rejects_non_buyer_without_settlement() {
         User buyer = register("confirm_other_buyer");
         User seller = register("confirm_other_seller");

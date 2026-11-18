@@ -96,7 +96,30 @@ class FileStorageServiceTest {
     @Test
     void authenticated_user_can_upload_image() {
         User user = userService.register("upload_http_user", "123456", "123456", "上传测试");
-        ByteArrayResource image = new ByteArrayResource(new byte[]{7, 8, 9}) {
+        ResponseEntity<Map> response = upload(user, new byte[]{7, 8, 9});
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(0, ((Number) response.getBody().get("code")).intValue());
+        assertTrue(response.getBody().get("data").toString().matches("/uploads/[0-9a-f-]{36}\\.png"));
+    }
+
+    @Test
+    void multipart_upload_accepts_five_megabytes_and_rejects_larger_files() {
+        User user = userService.register("upload_size_user", "123456", "123456", "上传大小测试");
+        int maxBytes = 5 * 1024 * 1024;
+
+        ResponseEntity<Map> withinLimit = upload(user, new byte[maxBytes]);
+        assertEquals(HttpStatus.OK, withinLimit.getStatusCode());
+        assertEquals(0, ((Number) withinLimit.getBody().get("code")).intValue());
+
+        ResponseEntity<Map> overLimit = upload(user, new byte[maxBytes + 1]);
+        assertEquals(HttpStatus.CONTENT_TOO_LARGE, overLimit.getStatusCode());
+        assertEquals(41300, ((Number) overLimit.getBody().get("code")).intValue());
+        assertEquals("图片大小不能超过 5 MB", overLimit.getBody().get("message"));
+    }
+
+    private ResponseEntity<Map> upload(User user, byte[] bytes) {
+        ByteArrayResource image = new ByteArrayResource(bytes) {
             @Override
             public String getFilename() {
                 return "avatar.png";
@@ -108,12 +131,8 @@ class FileStorageServiceTest {
         headers.setContentType(MediaType.MULTIPART_FORM_DATA);
         headers.setBearerAuth(jwtUtil.generate(user.getId(), user.getUsername()));
 
-        ResponseEntity<Map> response = rest.postForEntity(url("/api/community/upload"),
+        return rest.postForEntity(url("/api/community/upload"),
                 new HttpEntity<>(body, headers), Map.class);
-
-        assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertEquals(0, ((Number) response.getBody().get("code")).intValue());
-        assertTrue(response.getBody().get("data").toString().matches("/uploads/[0-9a-f-]{36}\\.png"));
     }
 
     private String url(String path) {

@@ -1,5 +1,6 @@
 package com.campus.bounty.admin;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -37,4 +38,20 @@ public class Report {
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
+
+    @JsonIgnore
+    @Column(name = "handler_id")
+    private Long handlerId;
+
+    @JsonIgnore
+    @Column(name = "handled_at")
+    private LocalDateTime handledAt;
+
+    @JsonIgnore
+    @Column(length = 16)
+    private String result;
+
+    @JsonIgnore
+    @Column(name = "handle_comment", length = 500)
+    private String handleComment;
 }

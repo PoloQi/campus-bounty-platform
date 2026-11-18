@@ -30,7 +30,7 @@ public class WalletLog {
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal amount;
 
-    @Column(name = "balance_after", nullable = false, precision = 10, scale = 2)
+    @Column(name = "balance_after", nullable = false, precision = 30, scale = 2)
     private BigDecimal balanceAfter;
 
     @Column(name = "order_id")

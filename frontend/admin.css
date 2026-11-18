@@ -46,7 +46,7 @@
 .admin-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(152px, 1fr)); gap: var(--space-lg); margin: 0; }
 .admin-kpis > div { padding-left: 12px; border-left: 2px solid var(--line); }
 .admin-kpis dt, .admin-record dt, .admin-timeline time { color: var(--muted); font-size: var(--font-small); }
-.admin-kpis dd { margin: 4px 0 0; font-size: 23px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.admin-kpis dd { margin: 4px 0 0; font-size: 23px; font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .admin-kpis .admin-kpi-detail { font-size: var(--font-small); font-weight: 400; }
 .admin-discrepancy { color: var(--danger); }
 .admin-charts { display: grid; grid-template-columns: minmax(0, .75fr) minmax(0, 1fr); gap: var(--space-md); }
@@ -57,7 +57,7 @@
   width: clamp(112px, 14vw, 174px);
   aspect-ratio: 1;
   border-radius: 50%;
-  background: conic-gradient(var(--slices));
+  overflow: hidden;
 }
 .admin-swatch { width: 11px; height: 11px; border-radius: 2px; background: var(--swatch); }
 .admin-trend { display: block; width: 100%; height: auto; margin-top: var(--space-sm); }

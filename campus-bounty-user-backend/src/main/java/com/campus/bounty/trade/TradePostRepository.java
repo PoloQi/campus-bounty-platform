@@ -21,7 +21,7 @@ public interface TradePostRepository extends JpaRepository<TradePost, Long> {
                            @Param("kw") String keyword, @Param("now") LocalDateTime now);
 
     default List<TradePost> search(PostType type, String category, String keyword) {
-        return search(type, category, keyword, LocalDateTime.now());
+        return search(type, category, keyword, BountyDeadline.now());
     }
 
     @Query("select p.title from TradePost p where p.type = :type and p.status = :status "
@@ -34,6 +34,8 @@ public interface TradePostRepository extends JpaRepository<TradePost, Long> {
     Optional<TradePost> findByIdForUpdate(@Param("id") Long id);
 
     Optional<TradePost> findByIdAndStatus(Long id, PostStatus status);
+
+    Optional<TradePost> findByPublisherIdAndPublishRequestId(Long publisherId, String publishRequestId);
 
     List<TradePost> findByPublisherIdOrderByIdDesc(Long publisherId);
 }

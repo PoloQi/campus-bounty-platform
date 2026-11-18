@@ -79,7 +79,12 @@ public class AdminQueries {
                                  LocalDate from, LocalDate through, int page) {
         var query = filter("""
                 select o.id, p.type, p.id as post_id, p.title, o.buyer_id, o.seller_id,
-                    o.amount, o.status, o.created_at
+                    o.amount, o.status, o.created_at,
+                    case when o.status = 'DISPUTED' then (
+                        select a.id from t_appeal a
+                        where a.order_id = o.id and a.status = 'OPEN'
+                        order by a.id desc limit 1
+                    ) end as open_appeal_id
                 from trade_order o join trade_post p on p.id = o.post_id where 1 = 1
                 """).equal("o.status", name(status)).equal("p.type", name(type))
                 .equal("o.buyer_id", buyerId).equal("o.seller_id", sellerId)
@@ -151,10 +156,33 @@ public class AdminQueries {
     }
 
     private Query reportQuery() {
+        // 现行审计匹配完整详情，历史审计匹配固定前缀。处理意见不参与历史动作识别。
         return filter("""
                 select r.id, r.target_type, r.target_id, r.reporter_id, r.reason, r.status, r.created_at,
-                    x.result, x.comment, x.admin_id, x.handled_at, x.moderation_action
-                from t_report r left join t_report_resolution x on x.report_id = r.id where 1 = 1
+                    r.result, r.handle_comment as comment, r.handler_id as admin_id, r.handled_at,
+                    case when r.result = 'VALID' then (
+                        select case
+                            when a.detail = concat('POST #', r.target_id, ' · 成立 · DELETE_POST · ', r.handle_comment)
+                                or (r.target_type = 'POST' and a.detail like concat(
+                                    '处理举报#', r.id, '（POST:', r.target_id, '）action=DELETE!_POST result=VALID；%') escape '!')
+                                then 'DELETE_POST'
+                            when a.detail = concat('TRADE_POST #', r.target_id, ' · 成立 · CLOSE_TRADE_POST · ', r.handle_comment)
+                                or (r.target_type = 'TRADE_POST' and a.detail like concat(
+                                    '处理举报#', r.id, '（TRADE!_POST:', r.target_id,
+                                    '）action=CLOSE!_TRADE!_POST result=VALID；%') escape '!')
+                                then 'CLOSE_TRADE_POST'
+                            when a.detail = concat('USER #', r.target_id, ' · 成立 · BAN_USER · ', r.handle_comment)
+                                or (r.target_type in ('POST', 'TRADE_POST', 'USER') and a.detail like concat(
+                                    '处理举报#', r.id, '（', replace(r.target_type, '_', '!_'), ':', r.target_id,
+                                    '）action=BAN!_USER result=VALID；%') escape '!')
+                                then 'BAN_USER'
+                        end
+                        from t_admin_log a
+                        where a.action = 'HANDLE_REPORT' and a.target_type = 'REPORT'
+                            and a.target_id = r.id and a.admin_id = r.handler_id
+                        order by a.id desc limit 1
+                    ) end as moderation_action
+                from t_report r where 1 = 1
                 """);
     }
 
@@ -205,8 +233,8 @@ public class AdminQueries {
 
     public Page<AuditRow> audit(Long adminId, String action, LocalDate from, LocalDate through, int page) {
         return filter("""
-                select id, admin_id, action, target_type, target_id, details, created_at
-                from admin_log where 1 = 1
+                select id, admin_id, action, target_type, target_id, detail as details, created_at
+                from t_admin_log where 1 = 1
                 """).equal("admin_id", adminId).equal("action", action)
                 .dates("created_at", from, through).page("id desc", page, AuditRow.class);
     }
@@ -287,7 +315,7 @@ public class AdminQueries {
     }
 
     public record OrderRow(Long id, String type, Long postId, String title, Long buyerId, Long sellerId,
-                           BigDecimal amount, String status, LocalDateTime createdAt) {
+                           BigDecimal amount, String status, LocalDateTime createdAt, Long openAppealId) {
     }
 
     public record UserRow(Long id, String username, String nickname, String role, String status, LocalDateTime createdAt) {

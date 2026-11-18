@@ -57,7 +57,8 @@ class AdminAccessSecurityTest {
     @Test
     void student_report_path_and_dedupe() {
         User student = register("sec_student_2");
-        Map<String, Object> body = Map.of("targetType", "POST", "targetId", 1, "reason", "测试举报");
+        User target = register("sec_report_target");
+        Map<String, Object> body = Map.of("targetType", "USER", "targetId", target.getId(), "reason", "测试举报");
 
         ResponseEntity<Map> first = rest.postForEntity(url("/api/reports"),
                 new HttpEntity<>(body, authHeaders(student)), Map.class);

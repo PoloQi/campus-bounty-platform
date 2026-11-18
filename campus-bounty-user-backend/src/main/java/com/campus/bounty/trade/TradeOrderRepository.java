@@ -35,6 +35,8 @@ public interface TradeOrderRepository extends JpaRepository<TradeOrder, Long> {
 
     List<TradeOrder> findBySellerIdOrderByIdDesc(Long sellerId);
 
+    Optional<TradeOrder> findByPostIdAndBuyerIdAndPurchaseRequestId(Long postId, Long buyerId, String purchaseRequestId);
+
     Optional<TradeOrder> findByPostIdAndStatusNot(Long postId, OrderStatus status);
 
     Optional<TradeOrder> findByPostId(Long postId);

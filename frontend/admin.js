@@ -118,13 +118,7 @@ async function dashboard(ctx,body) {
   const {totals,distribution,trend} = await adminApi(ctx,'/dashboard');
   if (ctx.signal.aborted) return;
   const colors = ['#806347','#a54a31','#bb7c2c','#42684f','#6f707b','#7f507d'];
-  let start = 0;
-  const stops = distribution.map(({total},i) => {
-    const end = start + total / (totals.orders || 1) * 100;
-    const segment = `${colors[i]} ${start}% ${end}%`;
-    start = end;
-    return segment;
-  }).join(',');
+  const hasTrend = trend.some(day => day.total);
   body.innerHTML = `${metrics([
     ['学生用户',number.format(totals.students)+' 人'],['订单总量',number.format(totals.orders)+' 单'],
     ['已完成交易额',money(totals.gmv)],['冻结总额',money(totals.frozen)],
@@ -133,48 +127,21 @@ async function dashboard(ctx,body) {
   ])}
     <div class="admin-charts">
       <section class="panel"><h2>订单状态分布</h2>
-        ${totals.orders ? `<div class="admin-distribution"><div class="admin-pie" aria-hidden="true" style="--slices:${stops}"></div>
+        ${totals.orders ? `<div class="admin-distribution"><div class="admin-pie" aria-hidden="true"></div>
           <ul>${distribution.map(({status,total},i) => `<li><span class="admin-swatch" style="--swatch:${colors[i]}"></span>
             <span>${label(orders,status)}</span><strong>${number.format(total)} 单</strong></li>`).join('')}</ul></div>`
           : '<p class="empty">暂无订单。</p>'}
       </section>
       <section class="panel"><h2>近 7 天订单趋势</h2>
-        ${trend.some(day => day.total) ? '<canvas class="admin-trend" width="560" height="210" aria-hidden="true"></canvas>'
+        ${hasTrend ? '<canvas class="admin-trend" width="560" height="210" aria-hidden="true"></canvas>'
           : '<p class="empty">近 7 天暂无新订单。</p>'}
         <ol class="admin-days">${trend.map(({orderDay,total}) => `<li><time datetime="${esc(orderDay)}">${esc(orderDay.slice(5).replace('-','/'))}</time>
           <strong>${number.format(total)} 单</strong></li>`).join('')}</ol>
       </section>
     </div>`;
-  const canvas = body.querySelector('.admin-trend');
-  if (canvas) drawOrderTrend(canvas,trend);
-}
-
-function drawOrderTrend(canvas,trend) {
-  const drawing = canvas.getContext('2d');
-  if (!drawing) return;
-  const {width,height} = canvas;
-  const max = Math.max(...trend.map(({total}) => total),1);
-  const coordinates = trend.map(({total},i) => [
-    (width / trend.length) * (i + .5), height - 16 - (height - 32) * total / max,
-  ]);
-  drawing.strokeStyle = '#e8ded1';
-  for (const y of [16,height / 2,height - 16]) {
-    drawing.beginPath();
-    drawing.moveTo(0,y);
-    drawing.lineTo(width,y);
-    drawing.stroke();
-  }
-  drawing.beginPath();
-  drawing.strokeStyle = '#9f3216';
-  drawing.lineWidth = 3;
-  coordinates.forEach(([x,y],i) => i ? drawing.lineTo(x,y) : drawing.moveTo(x,y));
-  drawing.stroke();
-  drawing.fillStyle = '#9f3216';
-  for (const [x,y] of coordinates) {
-    drawing.beginPath();
-    drawing.arc(x,y,4,0,Math.PI*2);
-    drawing.fill();
-  }
+  if (!totals.orders && !hasTrend) return;
+  const {mountDashboardCharts} = await import('./admin-charts.js');
+  if (!ctx.signal.aborted) mountDashboardCharts(body, distribution, trend, colors, ctx.signal);
 }
 
 export function orderSummary(detail) {
@@ -218,7 +185,9 @@ async function orderPage(ctx,body) {
     ${input(ctx,'buyerId','出资方编号','id')}${input(ctx,'sellerId','接单方编号','id')}${dates(ctx)}${filtersEnd}
     ${table('订单列表',['订单','交易帖','类型','出资方','接单方','金额','状态','创建时间'],page.items.map(row => [
       orderLink(row.id),esc(row.title),label(kinds,row.type),userLink(row.buyerId),userLink(row.sellerId),
-      money(row.amount),badge(orders,row.status),dateTime(row.createdAt),
+      money(row.amount),badge(orders,row.status)
+        + (row.openAppealId == null ? '' : ' · ' + navLink('appeals','去仲裁',{id:row.openAppealId})),
+      dateTime(row.createdAt),
     ]),'暂无匹配订单。')}${pagination(ctx,'orders',page)}`;
 }
 
@@ -414,7 +383,7 @@ const pages = {
 
 export async function renderAdmin(ctx) {
   const [tab,title] = tabs.find(([key]) => key === ctx.args[0]) ?? tabs[0];
-  if (!ctx.show(`<nav class="admin-nav" aria-label="管理端导航">${tabs.map(([key,text,glyph]) =>
+  if (!await ctx.show(`<nav class="admin-nav" aria-label="管理端导航">${tabs.map(([key,text,glyph]) =>
     `<a href="${adminHref(key)}"${key === tab ? ' aria-current="page"' : ''}>${icon(glyph,18)}<span>${text}</span></a>`).join('')}</nav>
     <header class="page-head"><h1>${title}</h1>${refresh}</header>
     <div class="admin-content stack" aria-busy="true"><p class="empty" role="status">加载中…</p></div>`)) return;

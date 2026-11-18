@@ -5,28 +5,29 @@
 
 两种模式，用途不同，不要混用：
 
-  readonly  只读探针。不写任何数据，可以对着真库（local profile）跑，
-            用来确认「服务起来了、鉴权生效、接口返回结构正确」。
+  readonly  只读探针。登录并读取接口，使用已有学生账号时也检查学生权限。
 
   full      完整业务链路。会注册用户、充值、发单、接单、举报、封禁、申诉，
-            只能对着 H2 内存库（test profile）跑，用完即弃，不污染共享库。
+            请使用 H2 内存库（test profile）或独立的测试数据库。
 
 用法：
 
+  # 先设置 BOUNTY_ADMIN_USERNAME 和 BOUNTY_ADMIN_PASSWORD
   python scripts/admin-smoke/smoke.py --mode readonly
-  python scripts/admin-smoke/smoke.py --mode full
   python scripts/admin-smoke/smoke.py --base http://localhost:8080 \
-      --admin-user admin --admin-password admin123 --mode readonly
+      --admin-user admin --admin-password admin123 --mode full
 
 退出码：0 全部通过；1 有失败项。
 """
 import argparse
 import datetime
 import json
+import os
 import sys
-import time
 import urllib.error
+import urllib.parse
 import urllib.request
+import uuid
 
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -41,9 +42,9 @@ class Api:
     def __init__(self, base):
         self.base = base.rstrip("/")
 
-    def call(self, method, path, body=None, token=None):
+    def call(self, method, path, body=None, token=None, headers=None):
         data = json.dumps(body).encode("utf-8") if body is not None else None
-        request = urllib.request.Request(self.base + path, data=data, method=method)
+        request = urllib.request.Request(self.base + path, data=data, method=method, headers=headers or {})
         request.add_header("Content-Type", "application/json")
         if token:
             request.add_header("Authorization", "Bearer " + token)
@@ -123,10 +124,10 @@ def preflight(api, args):
     check("admin 登录成功且角色为 ADMIN",
           token is not None and profile.get("role") == "ADMIN",
           "role=%s" % profile.get("role"))
-    return token
+    return token if profile.get("role") == "ADMIN" else None
 
 
-def readonly_checks(api, token):
+def readonly_checks(api, token, admin_user):
     print("\n[3] 数据看板")
     status, body, _ = api.call("GET", "/api/admin/dashboard", token=token)
     dash = data_of(body) or {}
@@ -162,11 +163,14 @@ def readonly_checks(api, token):
           all(r.get("status") == "COMPLETED" for r in rows), "n=%s" % len(rows))
 
     print("\n[5] 用户查询")
-    status, body, _ = api.call("GET", "/api/admin/users?keyword=admin", token=token)
+    query = urllib.parse.urlencode({"keyword": admin_user})
+    status, body, _ = api.call("GET", "/api/admin/users?" + query, token=token)
     page = data_of(body) or {}
     rows = page.get("items") or []
-    check("关键字命中 admin 账号",
-          any(r.get("username") == "admin" for r in rows), "n=%s" % len(rows))
+    check("关键字命中当前管理员账号",
+          code_of(body) == 0 and any(r.get("username", "").casefold() == admin_user.casefold()
+                                    and r.get("role") == "ADMIN" for r in rows),
+          "n=%s" % len(rows))
     check("用户列表不含密码字段",
           "passwordHash" not in json.dumps(rows), "leak=%s" % ("passwordHash" in json.dumps(rows)))
 
@@ -219,11 +223,12 @@ def readonly_checks(api, token):
     check("status=OPEN 只返回待裁决",
           all(r.get("status") == "OPEN" for r in rows), "n=%s" % len(rows))
 
+def student_access_check(api, username, password):
     print("\n[10] 学生 token 不得进入管理端")
-    # 用固定探针账号，避免每次对真库跑都新增一个垃圾用户
-    probe_name = "smprobe"
-    register(api, probe_name, "冒烟探针")
-    student_token, _ = login(api, probe_name, "123456")
+    student_token, profile = login(api, username, password)
+    if not student_token or profile.get("role") != "STUDENT":
+        check("七个只读端点均拒绝学生", False, "学生登录失败或账号不是学生")
+        return
     blocked = True
     path = ""
     for path in ("/api/admin/dashboard", "/api/admin/orders", "/api/admin/users",
@@ -238,7 +243,7 @@ def readonly_checks(api, token):
 
 
 def full_checks(api, token):
-    suffix = str(int(time.time()))[-6:]
+    suffix = uuid.uuid4().hex[:8]
 
     print("\n[11] 造数：买家充值 + 发悬赏 + 卖家接单")
     buyer_name = "smb" + suffix
@@ -247,9 +252,10 @@ def full_checks(api, token):
     register(api, seller_name, "冒烟卖家")
     buyer_token, buyer = login(api, buyer_name, "123456")
     seller_token, seller = login(api, seller_name, "123456")
-    buyer_id = buyer.get("id") or buyer.get("userId")
+    buyer_id = buyer.get("userId")
+    seller_id = seller.get("userId")
     check("买卖双方注册并登录成功", bool(buyer_token) and bool(seller_token),
-          "buyerId=%s sellerId=%s" % (buyer_id, seller.get("id")))
+          "buyerId=%s sellerId=%s" % (buyer_id, seller_id))
 
     api.call("POST", "/api/wallet/recharge", {"amount": 100}, buyer_token)
     status, body, _ = api.call("POST", "/api/trade/posts", {
@@ -257,7 +263,9 @@ def full_checks(api, token):
         "description": "管理端冒烟脚本生成",
         "price": 20,
         "category": "学习",
-        "deadline": "2027-12-31T23:59:59"}, buyer_token)
+        "deadline": (datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=8)))
+                     + datetime.timedelta(days=1)).replace(tzinfo=None).isoformat(timespec="seconds")},
+        buyer_token, headers={"Idempotency-Key": str(uuid.uuid4())})
     post_id = data_of(body)
     check("发布悬赏成功", post_id is not None, "postId=%s" % post_id)
     if post_id is None:
@@ -430,23 +438,37 @@ def summarize():
 def main():
     parser = argparse.ArgumentParser(description="管理端接口一键验证")
     parser.add_argument("--base", default="http://localhost:8080")
-    parser.add_argument("--admin-user", default="admin")
-    parser.add_argument("--admin-password", default="admin123")
+    parser.add_argument("--admin-user", default=os.environ.get("BOUNTY_ADMIN_USERNAME"))
+    parser.add_argument("--admin-password", default=os.environ.get("BOUNTY_ADMIN_PASSWORD"))
+    parser.add_argument("--student-user", default=os.environ.get("SMOKE_STUDENT_USERNAME"))
+    parser.add_argument("--student-password", default=os.environ.get("SMOKE_STUDENT_PASSWORD"))
     parser.add_argument("--mode", choices=("readonly", "full"), default="readonly")
     args = parser.parse_args()
+    if not args.admin_user or not args.admin_password:
+        parser.error("请设置 BOUNTY_ADMIN_USERNAME 和 BOUNTY_ADMIN_PASSWORD，或同时提供 --admin-user 和 --admin-password")
+    if bool(args.student_user) != bool(args.student_password):
+        parser.error("--student-user 和 --student-password 必须同时提供")
 
     api = Api(args.base)
     print("目标：%s" % args.base)
     print("模式：%s（%s）" % (args.mode,
                              "只读，不写数据" if args.mode == "readonly"
-                             else "完整链路，只能对 H2 跑"))
+                             else "完整链路，使用独立测试数据库"))
 
     token = preflight(api, args)
     if not token:
         print("  admin 登录失败，后续断言无法进行。请检查账号密码。")
         return summarize()
 
-    readonly_checks(api, token)
+    readonly_checks(api, token, args.admin_user)
+    if args.student_user:
+        student_access_check(api, args.student_user, args.student_password)
+    elif args.mode == "full":
+        probe_name = "smp" + uuid.uuid4().hex[:8]
+        register(api, probe_name, "冒烟探针")
+        student_access_check(api, probe_name, "123456")
+    else:
+        print("\n[10] 未提供已有学生账号，跳过学生权限探针")
     if args.mode == "full":
         full_checks(api, token)
     return summarize()

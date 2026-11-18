@@ -6,9 +6,11 @@ import com.campus.bounty.trade.dto.OrderDetailView;
 import com.campus.bounty.wallet.WalletService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -32,12 +34,23 @@ public class TradeOrderService {
         }
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public TradeOrder buy(Long postId, Long buyerId) {
+        return buy(postId, buyerId, UUID.randomUUID());
+    }
+
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public TradeOrder buy(Long postId, Long buyerId, UUID requestId) {
         TradePost post = postRepository.findByIdForUpdate(postId)
                 .orElseThrow(() -> new BizException("服务不存在"));
         if (post.getType() != PostType.SERVICE) {
             throw new BizException("该帖子不是服务");
+        }
+        String purchaseRequestId = requestId.toString();
+        // The post lock serializes purchase attempts. Read committed sees an order written by the previous holder.
+        var existing = orderRepository.findByPostIdAndBuyerIdAndPurchaseRequestId(postId, buyerId, purchaseRequestId);
+        if (existing.isPresent()) {
+            return existing.get();
         }
         if (post.getStatus() != PostStatus.OPEN) {
             throw new BizException("服务已下架");
@@ -50,6 +63,7 @@ public class TradeOrderService {
         order.setPostId(postId);
         order.setBuyerId(buyerId);
         order.setSellerId(post.getPublisherId());
+        order.setPurchaseRequestId(purchaseRequestId);
         order.setAmount(post.getPrice());
         order.setStatus(OrderStatus.IN_PROGRESS);
         orderRepository.save(order);
@@ -83,13 +97,12 @@ public class TradeOrderService {
         if (!isPendingBounty(order, post)) {
             throw new BizException("悬赏当前不可接单");
         }
-        LocalDateTime now = LocalDateTime.now();
-        if (hasElapsed(post, now)) {
+        if (hasElapsed(post, BountyDeadline.now())) {
             throw new BizException("接单截止时间已过，请等待发布者延长");
         }
         order.setSellerId(accepterId);
         order.setStatus(OrderStatus.IN_PROGRESS);
-        order.setUpdatedAt(now);
+        order.setUpdatedAt(LocalDateTime.now());
         orderRepository.save(order);
         post.setStatus(PostStatus.LOCKED);
         postRepository.save(post);
@@ -118,7 +131,7 @@ public class TradeOrderService {
             throw new BizException("只有发布者可延长接单截止时间");
         }
         TradePost post = lockedPost(order);
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = BountyDeadline.now();
         if (!isPendingBounty(order, post) || !hasElapsed(post, now)) {
             throw new BizException("仅到期且无人接单的悬赏可延长");
         }
@@ -127,7 +140,7 @@ public class TradeOrderService {
         }
 
         post.setDeadline(deadline);
-        order.setUpdatedAt(now);
+        order.setUpdatedAt(LocalDateTime.now());
         return order;
     }
 
@@ -135,7 +148,8 @@ public class TradeOrderService {
     public void notifyDeadlineElapsed(Long orderId) {
         TradeOrder order = locked(orderId);
         TradePost post = lockedPost(order);
-        if (!isPendingBounty(order, post) || !hasElapsed(post, LocalDateTime.now())) {
+        LocalDateTime now = BountyDeadline.now();
+        if (!isPendingBounty(order, post) || !hasElapsed(post, now)) {
             return;
         }
 
@@ -144,7 +158,7 @@ public class TradeOrderService {
             return;
         }
         notificationService.push(order.getBuyerId(), BOUNTY_EXPIRED,
-                "悬赏「" + post.getTitle() + "」已超过接单截止时间。请取消悬赏或延长截止时间。", orderId);
+                "悬赏「" + post.getTitle() + "」已超过接单截止时间。请取消悬赏或延长截止时间。", orderId, now);
     }
 
     @Transactional

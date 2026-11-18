@@ -27,6 +27,61 @@ const listRoute = type => type === 'SERVICE' ? 'services' : 'bounties';
 const publishRoute = type => type === 'SERVICE' ? 'publish-service' : 'publish-bounty';
 const href = (route, ...args) => esc(routeHref(route, ...args));
 const deadlineTime = value => value ? Date.parse(value + '+08:00') : NaN;
+const deadlineFormat = new Intl.DateTimeFormat('zh-CN', {
+  timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
+  hour: '2-digit', minute: '2-digit', hour12: false,
+});
+const pendingTradeRequests = new Map();
+
+function deadlineLabel(value) {
+  const instant = deadlineTime(value);
+  return Number.isNaN(instant) ? '—' : deadlineFormat.format(instant);
+}
+
+function pendingTradeRequest(storageKey) {
+  try {
+    return sessionStorage.getItem(storageKey) ?? pendingTradeRequests.get(storageKey);
+  } catch {
+    return pendingTradeRequests.get(storageKey);
+  }
+}
+
+function rememberTradeRequest(storageKey, value) {
+  if (value) pendingTradeRequests.set(storageKey, value);
+  else pendingTradeRequests.delete(storageKey);
+  try {
+    if (value) sessionStorage.setItem(storageKey, value);
+    else sessionStorage.removeItem(storageKey);
+  } catch { /* The current page can still retry. */ }
+}
+
+function newTradeRequestId() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+  return [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20), hex.slice(20)].join('-');
+}
+
+function tradeRequestRejected(error) {
+  return error instanceof ApiError && error.code === 40000 && error.status > 0 && error.status < 500;
+}
+
+async function buyService(postId, storageKey) {
+  const requestId = pendingTradeRequest(storageKey) ?? newTradeRequestId();
+  rememberTradeRequest(storageKey, requestId);
+  try {
+    return await api(`/api/trade/posts/${postId}/buy`, {
+      method: 'POST', headers: {'Idempotency-Key': requestId},
+    });
+  } catch (error) {
+    if (tradeRequestRejected(error)) {
+      rememberTradeRequest(storageKey, null);
+    }
+    throw error;
+  }
+}
 
 function isExpiredBounty(post) {
   return post?.type === 'BOUNTY' && post.status === 'OPEN' && deadlineTime(post.deadline) <= Date.now();
@@ -73,7 +128,7 @@ function listingCard(post) {
     <span class="market-card-body">
       <span class="market-card-title">${esc(post.title)}</span>
       <span class="market-card-description">${esc(post.description)}</span>
-      <span class="market-card-meta">${esc(post.category)}${post.deadline ? ` · ${esc(dateTime(post.deadline))} 截止` : ''}</span>
+      <span class="market-card-meta">${esc(post.category)}${post.deadline ? ` · ${esc(deadlineLabel(post.deadline))} 截止` : ''}</span>
     </span>
     <span class="market-card-end"><strong class="market-price">${esc(money(post.price))}</strong><small>${service ? '待下单' : '待接单'}</small></span>
     <span class="market-card-arrow">${icon('upRight', 17)}</span>
@@ -99,7 +154,7 @@ async function hall(ctx, type) {
   if (category && !options.includes(category)) options.unshift(category);
   const categories = [['', '全部'], ...options.map(name => [name, name])];
   const publishLabel = service ? '发布服务' : '发布悬赏';
-  if (!ctx.show(`
+  if (!await ctx.show(`
     <section class="market-page">
       <div class="market-banner page-head">
         <div>
@@ -146,7 +201,7 @@ function tradePostDetails(post) {
     <div class="market-post-facts">
       <span>${icon('users', 17)}发布者 用户 ${esc(post.publisherId)}</span>
       <span>${icon('calendar', 17)}发布于 ${esc(dateTime(post.createdAt))}</span>
-      ${post.deadline ? `<span>${icon('clock', 17)}接单截止 ${esc(dateTime(post.deadline))}</span>` : ''}
+      ${post.deadline ? `<span>${icon('clock', 17)}接单截止 ${esc(deadlineLabel(post.deadline))}</span>` : ''}
     </div>
   </article>`;
 }
@@ -211,7 +266,7 @@ function actionDialog(ctx, options) {
     try {
       result = await options.save(value);
     } catch (failure) {
-      needsRefresh = failure.status === 409 || /订单状态不允许|不可下单|已关闭|不存在|不在处理中|接单已截止|已(?:过|超过)接单截止/.test(failure.message);
+      needsRefresh = failure.status === 409 || /订单状态不允许|不可下单|已下架|已关闭|不存在|不在处理中|接单已截止|已(?:过|超过)接单截止/.test(failure.message);
       error.textContent = errorText(failure);
       error.hidden = false;
       if (needsRefresh) {
@@ -241,10 +296,12 @@ async function tradeDetail(ctx, id) {
   const own = userId === post.publisherId;
   const involved = order && [order.buyerId, order.sellerId].includes(userId);
   const service = post.type === 'SERVICE';
+  const purchaseStorageKey = `campus:pending-purchase:${userId}:${post.id}`;
+  const recoverPurchase = service && !own && post.status !== 'OPEN' && Boolean(pendingTradeRequest(purchaseStorageKey));
   const mayBuy = service && !own && post.status === 'OPEN';
   const expired = order?.status === 'PENDING' && isExpiredBounty(post);
   const mayAccept = !service && !own && order?.status === 'PENDING' && post.status === 'OPEN' && !expired;
-  if (!ctx.show(`
+  if (!await ctx.show(`
     <section class="market-page">
       ${link(listRoute(post.type), '← 返回' + (service ? '技能服务' : '悬赏大厅'), 'market-back')}
       <div class="page-head market-trade-heading"><div><h1>${service ? '服务详情' : '悬赏详情'}</h1><p>${esc(post.title)}</p></div>${badge(expired ? 'EXPIRED' : order?.status || post.status)}</div>
@@ -255,6 +312,7 @@ async function tradeDetail(ctx, id) {
             <strong class="market-price">${esc(money(post.price))}</strong>
           </div>
           ${mayBuy ? actionButton('buy', '购买服务', '') : ''}
+      ${recoverPurchase ? actionButton('buy', '查询下单结果', '') : ''}
           ${mayAccept ? actionButton('accept', '接下悬赏', '') : ''}
           ${expired && !own ? '<p class="muted">已过接单截止时间，等待发布者处理。</p>' : ''}
           ${involved ? link('order', expired ? '处理悬赏' : '查看关联订单', 'button', order.id) : ''}
@@ -269,8 +327,15 @@ async function tradeDetail(ctx, id) {
   const newOrder = result => ctx.go('order', result.id);
   bindActionButtons(ctx.main, {
     buy: tradeConfirmation(ctx, {
-      title: '购买服务', note: `下单后将从可用余额托管 ${money(post.price)}。`, submit: '确认下单', success: '已创建订单',
-      save: () => api(`/api/trade/posts/${post.id}/buy`, {method: 'POST'}), done: newOrder,
+      title: recoverPurchase ? '查询下单结果' : '购买服务',
+      note: recoverPurchase ? '查询上一次下单请求的结果。' : `下单后将从可用余额托管 ${money(post.price)}。`,
+      submit: recoverPurchase ? '查询' : '确认下单',
+      success: recoverPurchase ? '已找到订单' : '已创建订单',
+      save: () => buyService(post.id, purchaseStorageKey),
+      done: result => {
+        rememberTradeRequest(purchaseStorageKey, null);
+        newOrder(result);
+      },
     }),
     accept: tradeConfirmation(ctx, {
       title: '接下悬赏', note: '确认你可以按发布者的要求完成这项悬赏。', submit: '确认接单', success: '已接下悬赏',
@@ -287,10 +352,10 @@ async function tradeDetail(ctx, id) {
   });
 }
 
-function publish(ctx, type) {
+async function publish(ctx, type) {
   const service = type === 'SERVICE';
   const publishLabel = service ? '发布服务' : '发布悬赏';
-  if (!ctx.show(`
+  if (!await ctx.show(`
     <section class="market-page">
       ${link(listRoute(type), '← 返回' + (service ? '技能服务' : '悬赏大厅'), 'market-back')}
       <div class="page-head"><div><h1>${publishLabel}</h1><p class="muted">${service ? '说明你可以提供的服务和交付内容。' : '说清楚你需要的帮助、赏金和接单截止时间。'}</p></div>
@@ -308,6 +373,7 @@ function publish(ctx, type) {
         <label class="field"><span>图片（选填）</span><input name="images" type="file" accept=".jpg,.jpeg,.png,.gif,.webp" multiple aria-describedby="market-image-help"></label>
         <p id="market-image-help" class="muted">JPG、PNG、GIF 或 WebP，每张不超过 5 MB。</p>
         ${service ? '' : `<p class="market-fund-note">${icon('wallet', 17)}发布后将托管对应赏金。 ${link('wallet', '查看钱包', 'market-inline')}</p>`}
+        ${service ? '' : '<p class="muted" data-publish-pending role="status" hidden>上次发布结果待确认。重试会沿用原请求，只冻结一次赏金。</p>'}
         <p class="form-error" role="alert" hidden></p>
         <div class="market-actions"><button class="button" type="submit">${publishLabel}</button></div>
       </form>
@@ -317,50 +383,95 @@ function publish(ctx, type) {
   const submit = form.querySelector('[type="submit"]');
   const error = form.querySelector('[role="alert"]');
   const uploads = new Map();
+  const storageKey = `campus:pending-bounty:${ctx.user.id}`;
+  const pendingNote = form.querySelector('[data-publish-pending]');
+  let pending = null;
+  if (!service) {
+    try {
+      pending = JSON.parse(pendingTradeRequest(storageKey) ?? 'null');
+    } catch { /* A missing or unreadable request leaves an empty form. */ }
+    if (pending) {
+      for (const name of ['title', 'category', 'price', 'deadline', 'description']) {
+        form.elements[name].value = pending.payload[name];
+      }
+    }
+  }
+
+  function showPending() {
+    if (service) return;
+    pendingNote.hidden = !pending;
+    submit.textContent = pending ? '重试发布' : publishLabel;
+    for (const field of form.elements) {
+      if (field !== submit) field.disabled = Boolean(pending);
+    }
+  }
+
+  showPending();
   input.addEventListener('change', () => uploads.clear());
+
+  async function preparePayload() {
+    const payload = Object.fromEntries(new FormData(form));
+    const files = [...input.files];
+    input.disabled = true;
+    payload.title = payload.title.trim();
+    payload.category = payload.category.trim();
+    payload.description = payload.description.trim();
+    if (![payload.title, payload.category, payload.description].every(Boolean)) {
+      throw new ApiError('请填写标题、分类和描述。');
+    }
+    if (!service && !(deadlineTime(payload.deadline) > Date.now())) {
+      form.elements.deadline.focus();
+      throw new ApiError('接单截止时间必须晚于当前时间。');
+    }
+    if (files.some(file => !file.size || file.size > 5 * 1024 * 1024 || !/\.(jpg|jpeg|png|gif|webp)$/i.test(file.name))) {
+      throw new ApiError('请上传 JPG、PNG、GIF 或 WebP 图片，每张不超过 5 MB。');
+    }
+    const paths = [];
+    for (const [index, file] of files.entries()) {
+      if (ctx.signal.aborted) return;
+      if (!uploads.has(index)) uploads.set(index, await uploadImage(file));
+      paths.push(uploads.get(index));
+    }
+    payload.images = paths.join(',');
+    if (payload.images.length > 500) throw new ApiError('图片地址总长度超限，请减少图片。');
+    payload.price = Number(payload.price);
+    if (!service && payload.deadline.length === 16) payload.deadline += ':00';
+    return payload;
+  }
+
   form.addEventListener('submit', async event => {
     event.preventDefault();
     if (submit.disabled) return;
     submit.disabled = true;
-    const payload = Object.fromEntries(new FormData(form));
-    const files = [...input.files];
-    input.disabled = true;
     error.hidden = true;
     try {
-      payload.title = payload.title.trim();
-      payload.category = payload.category.trim();
-      payload.description = payload.description.trim();
-      if (![payload.title, payload.category, payload.description].every(Boolean)) {
-        throw new ApiError('请填写标题、分类和描述。');
-      }
-      if (!service && !(deadlineTime(payload.deadline) > Date.now())) {
-        form.elements.deadline.focus();
-        throw new ApiError('接单截止时间必须晚于当前时间。');
-      }
-      if (files.some(file => !file.size || file.size > 5 * 1024 * 1024 || !/\.(jpg|jpeg|png|gif|webp)$/i.test(file.name))) {
-        throw new ApiError('请上传 JPG、PNG、GIF 或 WebP 图片，每张不超过 5 MB。');
-      }
-      const paths = [];
-      for (const [index, file] of files.entries()) {
-        if (ctx.signal.aborted) return;
-        if (!uploads.has(index)) uploads.set(index, await uploadImage(file));
-        paths.push(uploads.get(index));
-      }
-      payload.images = paths.join(',');
-      if (payload.images.length > 500) throw new ApiError('图片地址总长度超限，请减少图片。');
+      const payload = pending?.payload ?? await preparePayload();
       if (ctx.signal.aborted) return;
-      payload.price = Number(payload.price);
-      if (!service && payload.deadline.length === 16) payload.deadline += ':00';
-      const id = await api(service ? '/api/trade/services' : '/api/trade/posts', {method: 'POST', body: payload});
+      if (!service && !pending) {
+        pending = {requestId: newTradeRequestId(), payload};
+        rememberTradeRequest(storageKey, JSON.stringify(pending));
+        showPending();
+      }
+      const headers = pending ? {'Idempotency-Key': pending.requestId} : undefined;
+      const id = await api(service ? '/api/trade/services' : '/api/trade/posts', {
+        method: 'POST', body: payload, headers,
+      });
       if (ctx.signal.aborted) return;
+      if (pending) rememberTradeRequest(storageKey, null);
       toast('发布成功');
       ctx.go('trade', id);
     } catch (failure) {
+      if (ctx.signal.aborted) return;
+      if (pending && tradeRequestRejected(failure)) {
+        rememberTradeRequest(storageKey, null);
+        pending = null;
+        showPending();
+      }
       error.textContent = errorText(failure);
       error.hidden = false;
     } finally {
       submit.disabled = false;
-      input.disabled = false;
+      input.disabled = Boolean(pending);
     }
   });
 }
@@ -390,7 +501,7 @@ async function myOrders(ctx) {
   }
   if (ctx.signal.aborted) return;
   const pageLink = number => esc(routeHref('orders', current[0]) + '?page=' + number);
-  ctx.show(`
+  await ctx.show(`
     <section class="market-page">
       <div class="page-head"><div><h1>我的交易</h1><p class="muted">查看发布记录和订单进度。</p></div>${link('wallet', '我的钱包', 'button secondary')}</div>
       <nav class="market-tabs market-order-tabs" aria-label="交易视图">
@@ -470,7 +581,7 @@ async function orderDetail(ctx, id) {
     mayReview ? api('/api/reviews/order/' + encodeURIComponent(order.id), {signal: ctx.signal}) : [],
   ]);
   const hasReviewed = reviews.some(item => item.fromUserId === userId);
-  if (!ctx.show(`
+  if (!await ctx.show(`
     <section class="market-page">
       ${link('orders', '← 返回我的交易', 'market-back')}
       <div class="page-head"><div><h1>订单详情</h1><p class="muted">订单 #${esc(order.id)}</p></div>${badge(expired ? 'EXPIRED' : status)}</div>

@@ -103,11 +103,28 @@ class LoginTest {
         assertNotNull(response.getBody().get("message"));
     }
 
+    @Test
+    void registration_enforces_bcrypt_limit_in_utf8_bytes() {
+        String valid = "字".repeat(24);
+        assertEquals(0, code(register("stu_password_fit", valid)));
+        assertEquals(0, code(login("stu_password_fit", valid)));
+
+        ResponseEntity<Map> oversized = register("stu_password_large", valid + "a");
+        assertEquals(HttpStatus.OK, oversized.getStatusCode());
+        assertEquals(40000, code(oversized));
+        assertEquals("密码不能超过 72 个 UTF-8 字节", oversized.getBody().get("message"));
+        assertFalse(userRepository.existsByUsername("stu_password_large"));
+    }
+
     private ResponseEntity<Map> register(String username) {
+        return register(username, "123456");
+    }
+
+    private ResponseEntity<Map> register(String username, String password) {
         return rest.postForEntity(url("/api/auth/register"), Map.of(
                 "username", username,
-                "password", "123456",
-                "confirmPassword", "123456",
+                "password", password,
+                "confirmPassword", password,
                 "nickname", "A"), Map.class);
     }
 

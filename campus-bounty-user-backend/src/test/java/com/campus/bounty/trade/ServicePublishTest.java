@@ -22,6 +22,7 @@ import org.springframework.test.context.ActiveProfiles;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -93,8 +94,10 @@ class ServicePublishTest {
         request.setPrice(new BigDecimal("5.00"));
         request.setCategory("跑腿");
 
+        HttpHeaders headers = authHeaders(publisher);
+        headers.set("Idempotency-Key", UUID.randomUUID().toString());
         ResponseEntity<Map> response = rest.postForEntity(url("/api/trade/posts"),
-                new HttpEntity<>(request, authHeaders(publisher)), Map.class);
+                new HttpEntity<>(request, headers), Map.class);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals(40000, code(response));

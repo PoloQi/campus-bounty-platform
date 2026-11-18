@@ -57,6 +57,25 @@ class CancelOrderTest {
     }
 
     @Test
+    void cancel_refunds_a_buyer_at_the_legacy_balance_limit() {
+        User buyer = register("cancel_capacity_buyer");
+        TradeOrder order = newPendingOrder(buyer, "退款超过旧余额上限");
+        walletService.recharge(buyer.getId(), new BigDecimal("99999939.99"));
+
+        orderService.cancel(order.getId(), buyer.getId());
+
+        assertEquals(OrderStatus.CANCELLED, orderRepository.findById(order.getId()).orElseThrow().getStatus());
+        var wallet = walletService.getOrCreate(buyer.getId());
+        assertEquals(0, wallet.getFrozen().compareTo(BigDecimal.ZERO));
+        BigDecimal expectedBalance = new BigDecimal("100000039.99");
+        assertEquals(0, wallet.getBalance().compareTo(expectedBalance));
+        var refund = walletService.logs(buyer.getId()).get(0);
+        assertEquals("UNFREEZE", refund.getType());
+        assertEquals(order.getId(), refund.getOrderId());
+        assertEquals(0, refund.getBalanceAfter().compareTo(expectedBalance));
+    }
+
+    @Test
     void detail_returns_cancelled_order_after_cancellation() {
         User buyer = register("cancel_detail_buyer");
         TradeOrder order = newPendingOrder(buyer, "取消后查看详情");

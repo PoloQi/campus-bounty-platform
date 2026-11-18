@@ -12,8 +12,15 @@ spring:
     properties:
       hibernate:
         format_sql: true
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
 server:
   port: 8080
+  tomcat:
+    # Drain uploads within the request cap so clients receive the 413 response.
+    max-swallow-size: 6MB
 jwt:
   secret: ${JWT_SECRET}
   expire-minutes: 1440

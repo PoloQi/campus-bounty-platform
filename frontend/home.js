@@ -51,7 +51,7 @@ export async function renderHome(ctx) {
   const categories = Array.from(new Set(bounties.items.map(item => item.category).filter(Boolean))).slice(0,5);
   const boardEmpty = bounties.failed ? '暂时无法加载悬赏，请稍后查看。' : '暂无待接单悬赏。';
   const first = bounties.items[0];
-  if (!ctx.show(`<div class="home">
+  if (!await ctx.show(`<div class="home">
     <section class="intro" aria-labelledby="intro-title">
       <div class="pitch"><h1 id="intro-title">有事需要帮忙？<br>来发个悬赏。</h1><p>把需求和赏金说清楚，等同学来接单。</p><a class="cta" href="#/publish-bounty">${icon('plus',20)}发布悬赏</a></div>
       ${feature(first,bounties.failed)}
@@ -74,7 +74,7 @@ export async function renderHome(ctx) {
 }
 
 export async function renderGuestHome(ctx) {
-  if (!ctx.show(`<div class="guest-home">
+  if (!await ctx.show(`<div class="guest-home">
 <section class="hero" aria-labelledby="hero-title">
 <div class="pitch">
 <h1 id="hero-title">在校园，<br>找同学搭把手。</h1>

@@ -1,0 +1,67 @@
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: campus_bounty
+      MYSQL_USER: campus_bounty
+      MYSQL_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD}
+      TZ: Asia/Shanghai
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./campus-bounty-user-backend/src/main/resources/db/schema.sql:/docker-entrypoint-initdb.d/10-schema.sql:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          MYSQL_PWD="$$MYSQL_PASSWORD" mysql --protocol=TCP --host=127.0.0.1 --user="$$MYSQL_USER"
+          --database="$$MYSQL_DATABASE" --execute='SELECT 1 FROM t_admin_log LIMIT 0'
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  backend:
+    image: ${BOUNTY_BACKEND_IMAGE:-campus-bounty-backend:local}
+    build: ./campus-bounty-user-backend
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/campus_bounty?characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&sslMode=DISABLED&allowPublicKeyRetrieval=true
+      DB_USERNAME: campus_bounty
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
+      BOUNTY_ADMIN_USERNAME: ${BOUNTY_ADMIN_USERNAME:?Set BOUNTY_ADMIN_USERNAME}
+      BOUNTY_ADMIN_PASSWORD: ${BOUNTY_ADMIN_PASSWORD:?Set BOUNTY_ADMIN_PASSWORD}
+      TZ: Asia/Shanghai
+    volumes:
+      - bounty-uploads:/app/uploads
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -ec
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/8080;
+          printf 'GET /api/public/bounty-titles HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3;
+          read -r protocol status reason <&3;
+          test "$$status" = 200
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  frontend:
+    image: ${BOUNTY_FRONTEND_IMAGE:-campus-bounty-frontend:local}
+    build: ./frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+        restart: true
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-5173}:80"
+
+volumes:
+  mysql-data:
+  bounty-uploads:

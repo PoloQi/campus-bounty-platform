@@ -4,9 +4,11 @@ import com.campus.bounty.common.ApiResponse;
 import com.campus.bounty.config.CurrentUser;
 import com.campus.bounty.user.dto.UpdateProfileReq;
 import com.campus.bounty.user.dto.UserProfileResp;
+import com.campus.bounty.user.dto.UserSummaryResp;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -21,6 +23,11 @@ public class UserController {
     @GetMapping("/me")
     public ApiResponse<UserProfileResp> me() {
         return ApiResponse.ok(userService.profile(CurrentUser.id()));
+    }
+
+    @GetMapping("/{id}/summary")
+    public ApiResponse<UserSummaryResp> summary(@PathVariable Long id) {
+        return ApiResponse.ok(userService.summary(id));
     }
 
     @PutMapping("/me")

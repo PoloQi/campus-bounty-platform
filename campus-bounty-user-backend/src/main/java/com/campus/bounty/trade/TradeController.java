@@ -9,28 +9,41 @@ import com.campus.bounty.trade.dto.PublishReq;
 import com.campus.bounty.trade.dto.ServicePublishReq;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+import java.util.regex.Pattern;
 
 @RestController
 @RequestMapping("/api/trade")
 @RequiredArgsConstructor
 public class TradeController {
+    private static final Pattern REQUEST_ID = Pattern.compile(
+            "[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}");
+
     private final TradePostService postService;
     private final TradeOrderService orderService;
     private final AppealService appealService;
 
     @PostMapping("/posts")
-    public ApiResponse<Long> publish(@Valid @RequestBody PublishReq request) {
-        return ApiResponse.ok(postService.publish(CurrentUser.id(), request).getId());
+    public ResponseEntity<ApiResponse<Long>> publish(@Valid @RequestBody PublishReq request,
+            @RequestHeader(name = "Idempotency-Key", required = false) String requestId) {
+        if (requestId == null || !REQUEST_ID.matcher(requestId).matches()) {
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.fail(40000, "发布悬赏必须带有效的 Idempotency-Key（UUID）"));
+        }
+        return ResponseEntity.ok(ApiResponse.ok(postService.publish(CurrentUser.id(), request,
+                UUID.fromString(requestId)).getId()));
     }
 
     @PostMapping("/services")
@@ -52,8 +65,13 @@ public class TradeController {
     }
 
     @PostMapping("/posts/{postId}/buy")
-    public ApiResponse<TradeOrder> buy(@PathVariable Long postId) {
-        return ApiResponse.ok(orderService.buy(postId, CurrentUser.id()));
+    public ResponseEntity<ApiResponse<TradeOrder>> buy(@PathVariable Long postId,
+            @RequestHeader(name = "Idempotency-Key", required = false) String requestId) {
+        if (requestId == null || !REQUEST_ID.matcher(requestId).matches()) {
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.fail(40000, "下单请求必须带有效的 Idempotency-Key（UUID）"));
+        }
+        return ResponseEntity.ok(ApiResponse.ok(orderService.buy(postId, CurrentUser.id(), UUID.fromString(requestId))));
     }
 
     @GetMapping("/orders/{id}")

@@ -41,6 +41,26 @@ class ChatServiceTest {
     }
 
     @Test
+    void recent_conversations_include_offline_incoming_messages_and_use_latest_id_per_peer() {
+        User owner = register("chat_list_owner");
+        User first = register("chat_list_first");
+        User second = register("chat_list_second");
+        User unrelated = register("chat_list_unrelated");
+
+        chatService.save(owner.getId(), first.getId(), "第一条");
+        Message incoming = chatService.save(second.getId(), owner.getId(), "离线来信");
+        Message latest = chatService.save(first.getId(), owner.getId(), "最新回复");
+        chatService.save(first.getId(), unrelated.getId(), "其他会话");
+
+        var conversations = chatService.recentConversations(owner.getId());
+
+        assertEquals(List.of(first.getId(), second.getId()),
+                conversations.stream().map(MessageRepository.ConversationSummary::getPeerId).toList());
+        assertEquals(List.of(latest.getId(), incoming.getId()),
+                conversations.stream().map(MessageRepository.ConversationSummary::getLastMessageId).toList());
+    }
+
+    @Test
     void blank_message_is_not_saved() {
         User first = register("chat_blank_first");
         User second = register("chat_blank_second");

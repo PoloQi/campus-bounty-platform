@@ -1,22 +1,13 @@
-const sessionKey = 'campus-bounty-session';
-let session;
-try {
-  const saved = JSON.parse(sessionStorage.getItem(sessionKey));
-  if (typeof saved?.token === 'string') {
-    const {token, user, ...legacy} = saved;
-    session = {token,user:user ?? legacy};
-  }
-} catch { session = null; }
+import axios from 'axios';
+import { pinia, useSessionStore } from './session.js';
 
-export function sessionToken() { return session?.token ?? ''; }
-export function currentUser() { return session?.user ?? null; }
+const session = useSessionStore(pinia);
+
+export function sessionToken() { return session.token; }
+export function currentUser() { return session.user; }
 
 export function storeSession(token, user) {
-  session = token ? {token,user:{...user,id:user?.id ?? user?.userId}} : null;
-  try {
-    if (session) sessionStorage.setItem(sessionKey, JSON.stringify(session));
-    else sessionStorage.removeItem(sessionKey);
-  } catch { /* Session stays available for the current page. */ }
+  session.save(token, user);
 }
 
 export function esc(value) {
@@ -43,31 +34,50 @@ export class ApiError extends Error {
   }
 }
 
+const http = axios.create({
+  adapter: 'fetch',
+  responseType: 'text',
+  validateStatus: () => true,
+});
+
+// Keep two-decimal wallet and aggregate values exact before JSON.parse converts numbers.
+// The string alternative skips quoted values, including any JSON text inside them.
+const wideMoneyToken = /("(?:balance|frozen|balanceAfter|gmv|expected|difference)"\s*:\s*)(-?(?:0|[1-9]\d*)(?:\.\d{1,2})?)(?=\s*[,}])|"(?:\\.|[^"\\])*"/g;
+
+http.interceptors.request.use(config => {
+  config.sessionToken = sessionToken();
+  if (config.sessionToken) config.headers.set('Authorization', 'Bearer ' + config.sessionToken, true);
+  return config;
+}, undefined, { synchronous: true });
+
+http.interceptors.response.use(response => {
+  const { status, config } = response;
+  let result = null;
+  try {
+    result = JSON.parse(response.data.replace(wideMoneyToken, (token, property, decimal) =>
+      property ? `${property}"${decimal}"` : token));
+  } catch { /* Non-JSON responses use the usual fallback message. */ }
+  if (status === 401 && config.sessionToken && config.sessionToken === sessionToken() && !config.url.startsWith('/api/auth/')) {
+    storeSession('', null);
+    window.dispatchEvent(new Event('session-expired'));
+  }
+  if (status < 200 || status >= 300 || !result || Number(result.code) !== 0) {
+    throw new ApiError(result?.message ?? '请求失败，请稍后重试。', status, result?.code);
+  }
+  return result.data;
+}, error => {
+  if (axios.isCancel(error)) throw new DOMException('The request was aborted.', 'AbortError');
+  throw new ApiError('暂时无法连接服务，请稍后重试。', 0);
+});
+
 export async function api(path, {body, headers, signal, method = 'GET'} = {}) {
   if (!path.startsWith('/api/')) throw new TypeError('接口地址无效');
   const requestHeaders = new Headers(headers);
-  const token = sessionToken();
-  if (token) requestHeaders.set('Authorization', 'Bearer ' + token);
   if (body != null && !(body instanceof FormData)) {
     requestHeaders.set('Content-Type', 'application/json');
     body = typeof body === 'string' ? body : JSON.stringify(body);
   }
-  let response;
-  try {
-    response = await fetch(path, {method, headers:requestHeaders, body, signal});
-  } catch (error) {
-    if (error.name === 'AbortError') throw error;
-    throw new ApiError('暂时无法连接服务，请稍后重试。', 0);
-  }
-  const result = await response.json().catch(() => null);
-  if (response.status === 401 && token && token === sessionToken() && !path.startsWith('/api/auth/')) {
-    storeSession('', null);
-    window.dispatchEvent(new Event('session-expired'));
-  }
-  if (!response.ok || !result || Number(result.code) !== 0) {
-    throw new ApiError(result?.message ?? '请求失败，请稍后重试。', response.status, result?.code);
-  }
-  return result.data;
+  return http.request({ url: path, method, headers: Object.fromEntries(requestHeaders), data: body, signal });
 }
 
 export function errorText(error) {
@@ -75,10 +85,18 @@ export function errorText(error) {
 }
 
 const currency = new Intl.NumberFormat('zh-CN', {maximumFractionDigits:2});
+const decimalMoney = /^(-?)(\d+)(?:\.(\d{1,2}))?$/;
 export function money(value) {
-  const amount = Number(value);
-  if (value == null || !Number.isFinite(amount)) return '—';
-  return (amount < 0 ? '-¥' : '¥') + currency.format(Math.abs(amount));
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return (value < 0 ? '-¥' : '¥') + currency.format(Math.abs(value));
+  }
+  const parts = typeof value === 'string' && decimalMoney.exec(value);
+  if (!parts) return '—';
+  const [, sign, whole, fraction = ''] = parts;
+  const integer = BigInt(whole);
+  const cents = fraction.replace(/0+$/, '');
+  const prefix = sign && (integer !== 0n || cents) ? '-¥' : '¥';
+  return prefix + currency.format(integer) + (cents ? '.' + cents : '');
 }
 
 const dateFormat = new Intl.DateTimeFormat('zh-CN', {

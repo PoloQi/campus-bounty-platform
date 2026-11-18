@@ -6,8 +6,6 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-import java.time.LocalDateTime;
-
 @Component
 @RequiredArgsConstructor
 @Slf4j
@@ -21,7 +19,7 @@ class BountyExpiryScheduler {
             fixedDelayString = "${app.bounty-expiry-scan-ms:15000}")
     void notifyDueBounties() {
         for (Long orderId : orderRepository.findDueBountyNoticeIds(
-                LocalDateTime.now(), TradeOrderService.BOUNTY_EXPIRED, BATCH)) {
+                BountyDeadline.now(), TradeOrderService.BOUNTY_EXPIRED, BATCH)) {
             try {
                 orderService.notifyDeadlineElapsed(orderId);
             } catch (RuntimeException error) {
