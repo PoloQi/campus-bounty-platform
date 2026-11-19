@@ -24,3 +24,12 @@ export interface OrderFilters extends Record<string, string> {
 }
 
 export type OrderQuery = OrderFilters & PageQuery
+
+export interface ReportFilters extends Record<string, string> {
+  /** ReportStatus PENDING/HANDLED，空串表示全部 */
+  status: string
+  /** ReportTargetType POST/TRADE_POST/USER，空串表示全部 */
+  targetType: string
+}
+
+export type ReportQuery = ReportFilters & PageQuery

@@ -30,6 +30,9 @@ export function useConfirm() {
         message: h(ConfirmBody, { rows: spec.rows, impact: spec.impact }),
         confirmButtonText: spec.confirmText ?? '确认',
         cancelButtonText: spec.cancelText ?? '返回',
+        // ElMessageBox(options) 走的是 alert 形态，showCancelButton 默认 false。
+        // 不显式打开的话，二次确认就只剩「确认」一个按钮 —— 用户无处可退。
+        showCancelButton: true,
         type: 'warning',
         closeOnClickModal: false,
         distinguishCancelAndClose: true,

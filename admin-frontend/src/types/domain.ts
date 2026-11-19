@@ -81,6 +81,11 @@ export interface OrderRow {
   amount: number
   status: OrderStatus
   createdAt: string
+  /**
+   * 仅当 status=DISPUTED 时后端会带出该订单当前 OPEN 的申诉 ID，其余为 null。
+   * 用于从订单直接跳到对应的申诉裁决页。
+   */
+  openAppealId: number | null
 }
 
 /** 用户摘要（订单详情里的 buyer / seller） */

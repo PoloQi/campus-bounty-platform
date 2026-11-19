@@ -1,0 +1,382 @@
+/**
+ * 举报处理页（列表 + 详情）。
+ * 只放举报特有的块：裁决卡、治理对象卡、处置开关、按编号治理弹窗。
+ * 通用的面板 / 键值表 / 两栏 / 表格样式在 layout.css 与 data.css 里，不重复定义。
+ */
+
+/* ── 列表单元格 ─────────────────────────────────────────────────── */
+.report-target {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.report-verdict {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* ── 详情页顶部：裁决结果槽 ─────────────────────────────────────── */
+.report-hero__verdict {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex: 0 0 auto;
+  max-width: 260px;
+  padding-left: 24px;
+  border-left: 1px solid var(--line-soft);
+}
+
+.report-hero__verdict-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.report-hero__verdict-value {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-strong);
+  text-align: right;
+  line-height: 1.5;
+}
+
+.report-hero__verdict.is-pending .report-hero__verdict-value {
+  color: var(--warning);
+}
+
+.report-hero__verdict-time {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ── 正文块 ─────────────────────────────────────────────────────── */
+.report-reason {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+  background: var(--table-head-bg);
+  border: 1px solid var(--line-soft);
+  font-size: 13.5px;
+  line-height: 1.85;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.report-comment {
+  margin-top: 16px;
+  padding: 12px 14px 12px 16px;
+  border-left: 3px solid var(--brand-400);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--brand-50);
+  font-size: 13px;
+  line-height: 1.8;
+  color: #1e3a8a;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ── 治理对象 ───────────────────────────────────────────────────── */
+.report-target-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.report-target-card__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--table-head-bg);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.report-target-card__status {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.report-target-card__summary {
+  padding: 14px 16px;
+  max-height: 260px;
+  overflow: auto;
+  font-size: 13.5px;
+  line-height: 1.85;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.report-target-missing {
+  display: flex;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+  background: var(--warning-bg);
+  border: 1px solid #fde3c8;
+}
+
+.report-target-missing__icon {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  font-size: 18px;
+  color: var(--warning);
+}
+
+.report-target-missing__title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #b45309;
+}
+
+.report-target-missing__text {
+  margin-top: 4px;
+  font-size: 12.5px;
+  line-height: 1.75;
+  color: #92400e;
+}
+
+/* ── 裁决二选一 ─────────────────────────────────────────────────── */
+.verdict {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.verdict__card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  text-align: left;
+  font-family: inherit;
+  background: var(--card-bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.verdict__card:hover {
+  border-color: var(--brand-200);
+  background: #fbfcff;
+}
+
+.verdict__card:focus-visible {
+  outline: 2px solid var(--brand-400);
+  outline-offset: 2px;
+}
+
+.verdict__card.is-active {
+  border-color: var(--brand-500);
+  background: var(--brand-50);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
+}
+
+/* 成立 = 危险动作，驳回 = 中性动作。选中态用颜色区分，避免两个卡片长得一样 */
+.verdict__card--valid.is-active {
+  border-color: var(--danger);
+  background: var(--danger-bg);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.08);
+}
+
+.verdict__card--rejected.is-active {
+  border-color: var(--muted);
+  background: var(--muted-bg);
+  box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.14);
+}
+
+.verdict__label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.verdict__card--valid.is-active .verdict__label {
+  color: var(--danger);
+}
+
+.verdict__desc {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+/* ── 表单字段 ───────────────────────────────────────────────────── */
+.form-field {
+  margin-bottom: 18px;
+}
+
+.form-field__label {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.form-field__hint {
+  font-size: 11.5px;
+  color: #a8b1c2;
+}
+
+/* ── 联动治理开关 ───────────────────────────────────────────────── */
+.moderate-toggle {
+  padding: 12px 14px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-sm);
+  background: #fbfcff;
+}
+
+.moderate-toggle.is-disabled {
+  background: var(--muted-bg);
+  border-style: solid;
+}
+
+.moderate-toggle__title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-strong);
+}
+
+.moderate-toggle__code {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--brand-50);
+  color: var(--brand-600);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+}
+
+.moderate-toggle__reason {
+  margin-top: 6px;
+  padding-left: 24px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--text-muted);
+}
+
+/* ── 提交区 ─────────────────────────────────────────────────────── */
+.form-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.form-actions__note {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ── 侧栏 ───────────────────────────────────────────────────────── */
+.kv-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.side-note {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line);
+  font-size: 12.5px;
+  line-height: 1.75;
+  color: var(--text-muted);
+}
+
+.rule-list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12.5px;
+  line-height: 1.75;
+  color: var(--text);
+}
+
+.rule-list li::marker {
+  color: var(--brand-400);
+}
+
+/* ── 按编号治理弹窗 ─────────────────────────────────────────────── */
+.md-intro {
+  margin-bottom: 16px;
+  font-size: 12.5px;
+  line-height: 1.8;
+  color: var(--text-muted);
+}
+
+.md-form {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.md-preview {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--table-head-bg);
+}
+
+.md-preview__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.md-preview__status {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.md-preview__summary {
+  max-height: 180px;
+  overflow: auto;
+  font-size: 13px;
+  line-height: 1.75;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+@media (max-width: 1280px) {
+  .verdict {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* 与 data.css 里 .detail-hero__amount 的窄屏处理保持一致：
+   摘要条改为纵向后，竖分隔线要换成横线，否则会变成一条悬空的竖条 */
+@media (max-width: 1180px) {
+  .report-hero__verdict {
+    align-items: flex-start;
+    max-width: none;
+    width: 100%;
+    padding-left: 0;
+    padding-top: 14px;
+    border-left: 0;
+    border-top: 1px solid var(--line-soft);
+  }
+
+  .report-hero__verdict-value {
+    text-align: left;
+  }
+}

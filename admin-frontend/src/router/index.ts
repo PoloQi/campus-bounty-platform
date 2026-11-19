@@ -46,6 +46,13 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '举报处理' },
       },
       {
+        // 处置表单要和治理对象摘要并排看，独立成页
+        path: 'reports/:id',
+        name: 'report-detail',
+        component: () => import('@/views/reports/ReportDetailView.vue'),
+        meta: { title: '举报详情' },
+      },
+      {
         path: 'users',
         name: 'users',
         component: () => import('@/views/users/UserListView.vue'),
