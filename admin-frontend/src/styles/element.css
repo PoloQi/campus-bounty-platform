@@ -1,0 +1,87 @@
+/*
+ * Element Plus 主题覆盖。
+ *
+ * 用 `html:root` 而不是 `:root`：EP 的组件样式是随组件按需注入的，加载顺序在
+ * 本文件之后，同权重会被它覆盖。提高一点特异性可以稳定压过默认值，
+ * 同时保持 importStyle: 'css'（改成 sass 会把整套主题打进产物）。
+ */
+html:root {
+  --el-color-primary: #2563eb;
+  --el-color-primary-light-3: #6792f1;
+  --el-color-primary-light-5: #92b1f5;
+  --el-color-primary-light-7: #bed0f9;
+  --el-color-primary-light-8: #d3e0fb;
+  --el-color-primary-light-9: #e9effd;
+  --el-color-primary-dark-2: #1e4fbc;
+
+  --el-color-success: #16a34a;
+  --el-color-warning: #d97706;
+  --el-color-danger: #dc2626;
+  --el-color-error: #dc2626;
+  --el-color-info: #64748b;
+
+  --el-text-color-primary: #0f172a;
+  --el-text-color-regular: #5b6678;
+  --el-text-color-secondary: #8a94a6;
+  --el-text-color-placeholder: #a9b2c3;
+
+  --el-border-color: #e6eaf2;
+  --el-border-color-light: #e6eaf2;
+  --el-border-color-lighter: #eef2f8;
+  --el-border-color-extra-light: #f3f6fb;
+
+  --el-fill-color-light: #f6f8fb;
+  --el-fill-color-lighter: #fafbfe;
+  --el-bg-color: #ffffff;
+  --el-bg-color-page: #f6f8fb;
+
+  --el-border-radius-base: 8px;
+  --el-border-radius-small: 6px;
+  --el-font-size-base: 14px;
+
+  --el-box-shadow-light: 0 1px 2px rgba(16, 24, 40, 0.04);
+  --el-box-shadow: 0 6px 20px rgba(15, 23, 42, 0.08);
+}
+
+/* 表格：表头浅底、行高压住，避免 EP 默认灰底偏重 */
+.el-table {
+  --el-table-header-bg-color: var(--table-head-bg);
+  --el-table-row-hover-bg-color: var(--table-row-hover);
+  --el-table-border-color: var(--line-soft);
+  --el-table-text-color: var(--text);
+  --el-table-header-text-color: var(--text-soft);
+  font-size: 13px;
+}
+
+.el-table th.el-table__cell {
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.01em;
+}
+
+.el-table .cell {
+  line-height: 1.6;
+}
+
+/* 按钮：去掉默认的圆润感，让主色更稳 */
+.el-button {
+  font-weight: 500;
+}
+
+.el-input__wrapper,
+.el-textarea__inner,
+.el-select__wrapper {
+  box-shadow: 0 0 0 1px var(--line) inset;
+}
+
+/* 二次确认弹窗：与卡片体系一致 */
+.admin-confirm-box {
+  border-radius: var(--radius-lg);
+  padding-bottom: 12px;
+}
+
+.admin-confirm-box .el-message-box__title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
