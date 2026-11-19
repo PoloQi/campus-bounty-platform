@@ -22,6 +22,7 @@ declare module 'vue' {
     ElSkeleton: typeof import('element-plus/es')['ElSkeleton']
     ElTable: typeof import('element-plus/es')['ElTable']
     ElTableColumn: typeof import('element-plus/es')['ElTableColumn']
+    ElTooltip: typeof import('element-plus/es')['ElTooltip']
     EmptyState: typeof import('./src/components/EmptyState.vue')['default']
     ErrorState: typeof import('./src/components/ErrorState.vue')['default']
     FilterBar: typeof import('./src/components/FilterBar.vue')['default']

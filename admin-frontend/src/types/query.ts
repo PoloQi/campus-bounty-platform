@@ -40,3 +40,16 @@ export interface AppealFilters extends Record<string, string> {
 }
 
 export type AppealQuery = AppealFilters & PageQuery
+
+export interface UserFilters extends Record<string, string> {
+  /**
+   * 一个输入框兼两种匹配方式（后端 SQL 就是这么写的）：
+   * 用户名 / 昵称走 like 模糊，用户编号走精确相等。
+   * 所以输 "12" 只命中 #12，不会把用户名里带 12 的账号一并捞出来。
+   */
+  keyword: string
+  /** UserStatus ACTIVE/BANNED，空串表示全部 */
+  status: string
+}
+
+export type UserQuery = UserFilters & PageQuery

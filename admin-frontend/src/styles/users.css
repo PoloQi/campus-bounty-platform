@@ -1,0 +1,133 @@
+/**
+ * 用户管理页。
+ * 只放这一页特有的块：本页统计条、账号单元格、管理员降调。
+ * 面板 / 表格 / 分页 / 筛选栏的样式在 layout.css 与 data.css 里，不重复定义。
+ */
+
+/* ── 本页统计 ───────────────────────────────────────────────────── */
+.user-stats {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.user-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 108px;
+  padding: 10px 14px;
+  background: var(--card-bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.user-stat__label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.user-stat__value {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text-strong);
+  /* 数字等宽，翻页时不跳动 */
+  font-variant-numeric: tabular-nums;
+}
+
+.user-stat__value.is-danger {
+  color: var(--danger);
+}
+
+.user-stats__note {
+  align-self: center;
+  margin-left: auto;
+  max-width: 340px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+/* ── 账号单元格 ─────────────────────────────────────────────────── */
+.user-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.user-cell__avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  /* 圆角方块比正圆更像「账号」，也和学生端的头像风格区分开 */
+  border-radius: 8px;
+  background: var(--brand-50);
+  border: 1px solid var(--brand-100);
+  color: var(--brand-600);
+  font-size: 13px;
+  font-weight: 600;
+  user-select: none;
+}
+
+/* 管理员用暖色，扫一眼就能从学生里挑出来 */
+.user-cell__avatar.is-admin {
+  background: var(--warning-bg);
+  border-color: #fde3c8;
+  color: #b45309;
+}
+
+.user-cell__info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.user-cell__name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-strong);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-cell__account {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── 管理员行 ───────────────────────────────────────────────────── */
+.user-table .is-admin-row td.el-table__cell {
+  background: #fbfcff;
+}
+
+.user-locked {
+  font-size: 12px;
+  color: #a8b1c2;
+  cursor: help;
+}
+
+@media (max-width: 1180px) {
+  .user-stats {
+    flex-wrap: wrap;
+  }
+
+  .user-stats__note {
+    align-self: flex-start;
+    margin-left: 0;
+    max-width: none;
+    width: 100%;
+    text-align: left;
+  }
+}

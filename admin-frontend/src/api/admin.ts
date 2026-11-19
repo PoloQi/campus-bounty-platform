@@ -13,8 +13,9 @@ import type {
   OrderDetail,
   OrderRow,
   ReportRow,
+  UserRow,
 } from '@/types/domain'
-import type { AppealQuery, OrderQuery, ReportQuery } from '@/types/query'
+import type { AppealQuery, OrderQuery, ReportQuery, UserQuery } from '@/types/query'
 import type { ReportTargetType } from '@/types/enums'
 
 /**
@@ -95,6 +96,36 @@ export async function closeTradePost(id: number): Promise<void> {
 /** POST /api/admin/users/{id}/ban —— 仅可治理 STUDENT，管理员账号会被后端拒绝 */
 export async function banUser(id: number): Promise<void> {
   await http.post<void>(`/api/admin/users/${id}/ban`)
+}
+
+/* ───────────────────────── 用户管理 ───────────────────────── */
+
+/**
+ * GET /api/admin/users
+ *
+ * 三个条件的匹配方式不一样，猜错就会「筛不出来还以为是没数据」：
+ *   - keyword：username / nickname 走 like 模糊（后端已 lower()，大小写不敏感），
+ *     同一个值还兼作编号精确匹配（cast(id as char(20)) = keyword）。
+ *     两者是 **OR** 关系 —— 输 "17" 会同时带出 #17 和用户名里含 "17" 的账号
+ *     （实测：user_c_1794898853131 也会被命中）。页面对纯数字关键词做了置顶补偿。
+ *   - status：精确相等。传枚举外的值不报错，只会安静地返回空列表。
+ *   - 排序固定 id desc，最新注册的在最前。
+ *
+ * 越界页与订单列表表现一致：items 为空、hasNext 为 false，page 原样回显。
+ */
+export async function fetchUsers(query: UserQuery, signal?: AbortSignal): Promise<Paged<UserRow>> {
+  const raw = await http.get<BackendPage<UserRow>>('/api/admin/users', query, { signal })
+  return toPaged(raw)
+}
+
+/**
+ * POST /api/admin/users/{id}/unban
+ *
+ * 与封禁对称，后端同样只放行 STUDENT（对管理员调用会返回 40000「只可治理学生账号」）。
+ * 解封只是把 status 置回 ACTIVE，不会恢复此前被删除的帖子或关闭的交易帖。
+ */
+export async function unbanUser(id: number): Promise<void> {
+  await http.post<void>(`/api/admin/users/${id}/unban`)
 }
 
 /* ───────────────────────── 申诉仲裁 ───────────────────────── */
