@@ -37,5 +37,25 @@ export default defineConfig({
   preview: {
     port: 5174,
     strictPort: true,
+    // preview 同样走代理，否则拿 dist 做本地验收时接口全 404
+    proxy: {
+      '/api': { target, changeOrigin: true },
+      '/uploads': { target, changeOrigin: true },
+      '/ws': { target, ws: true, changeOrigin: true },
+    },
+  },
+  build: {
+    // ECharts 单独成 chunk：它是本工程最大的依赖，独立后改业务代码不会让它失效
+    chunkSizeWarningLimit: 700,
+    rollupOptions: {
+      output: {
+        manualChunks(id: string) {
+          if (id.includes('node_modules/echarts') || id.includes('node_modules/zrender')) {
+            return 'vendor-echarts'
+          }
+          return undefined
+        },
+      },
+    },
   },
 })
