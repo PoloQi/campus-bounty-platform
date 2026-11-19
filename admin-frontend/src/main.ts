@@ -25,7 +25,11 @@ setUnauthorizedHandler(() => {
   const current = router.currentRoute.value
   if (current.name === 'login') return
   const redirect = current.fullPath && current.fullPath !== '/' ? current.fullPath : undefined
-  void router.replace({ name: 'login', query: redirect ? { redirect } : undefined })
+  // expired 只在这一处产生：并发 5 个 401 也只会有一次 replace，登录页因此只提示一次
+  void router.replace({
+    name: 'login',
+    query: { ...(redirect ? { redirect } : {}), expired: '1' },
+  })
 })
 
 app.mount('#app')

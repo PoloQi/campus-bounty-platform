@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useAsyncAction } from '@/composables/useAsyncAction'
@@ -12,6 +12,8 @@ const { loading, run } = useAsyncAction()
 
 const form = reactive({ username: '', password: '' })
 const errorText = ref('')
+/** 401 拦截器带过来的标记：会话失效时给一次说明，否则用户只会觉得「突然要我登录」 */
+const expired = computed(() => route.query.expired === '1')
 /** 模板里不能直接写 import.meta */
 const isDev = import.meta.env.DEV
 
@@ -78,6 +80,10 @@ async function submit(): Promise<void> {
       <form class="login__form" @submit.prevent="submit">
         <h2 class="login__title">管理员登录</h2>
         <p class="login__desc">使用平台管理员账号进入管理台</p>
+
+        <p v-if="expired" class="login__notice" role="status">
+          登录状态已失效{{ route.query.redirect ? '，重新登录后会回到原页面。' : '，请重新登录。' }}
+        </p>
 
         <div class="login__fields">
           <div class="login__field">

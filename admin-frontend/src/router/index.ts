@@ -77,6 +77,14 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/audit/AuditLogView.vue'),
         meta: { title: '审计日志' },
       },
+      {
+        // 兜底放进布局里：输错地址时侧栏仍然可用，能直接换模块，不用先回首页。
+        // 未登录访问未知路径会被守卫带去登录页（不是 404），避免暴露后台结构。
+        path: ':pathMatch(.*)*',
+        name: 'not-found',
+        component: () => import('@/views/error/NotFoundView.vue'),
+        meta: { title: '页面不存在' },
+      },
     ],
   },
   {
@@ -84,12 +92,6 @@ const routes: RouteRecordRaw[] = [
     name: 'forbidden',
     component: () => import('@/views/error/ForbiddenView.vue'),
     meta: { public: true, title: '无权限' },
-  },
-  {
-    path: '/:pathMatch(.*)*',
-    name: 'not-found',
-    component: () => import('@/views/error/NotFoundView.vue'),
-    meta: { public: true, title: '页面不存在' },
   },
 ]
 

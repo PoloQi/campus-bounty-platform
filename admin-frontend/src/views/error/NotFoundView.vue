@@ -24,13 +24,14 @@ function goDashboard(): void {
 </template>
 
 <style scoped>
+/* 这个页面渲染在管理布局的内容区里，不能再撑满 100vh，
+   否则外层滚一遍、侧栏底下还留一大片空白 */
 .error-page {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 100vh;
+  min-height: 62vh;
   padding: 24px;
-  background: var(--page-bg);
 }
 
 .error-page__card {

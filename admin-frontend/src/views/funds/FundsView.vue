@@ -173,6 +173,9 @@ async function filterByWalletUser(): Promise<void> {
 
 const updatedAt = ref('')
 
+/** 核对与流水同时失败通常就是后端不通：只报一次，别让同一条红字在一屏里出现两遍 */
+const allDown = computed(() => Boolean(fundsError.value && error.value))
+
 async function refresh(): Promise<void> {
   await Promise.all([loadFunds(), load()])
   if (!fundsError.value && !error.value) {
@@ -201,7 +204,10 @@ onMounted(async () => {
       </template>
     </PageHeader>
 
-    <div class="funds-top">
+    <!-- 后端整体不通时只留一个失败态；单边失败（例如只有流水请求挂了）仍走各自区块 -->
+    <ErrorState v-if="allDown" class="panel" :error="fundsError" @retry="refresh" />
+
+    <div v-if="!allDown" class="funds-top">
       <DetailSection title="托管资金核对" hint="钱包冻结总额 − 在途订单应收 = 差额">
         <el-skeleton v-if="fundsLoading && !funds" :rows="3" animated />
         <ErrorState v-else-if="fundsError" :error="fundsError" @retry="loadFunds" />
@@ -274,7 +280,7 @@ onMounted(async () => {
       </DetailSection>
     </div>
 
-    <div id="ledger">
+    <div v-if="!allDown" id="ledger">
       <FilterBar :loading="loading" @submit="submit" @reset="clearAll">
         <div class="filter-field">
           <label for="l-user">用户编号</label>

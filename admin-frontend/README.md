@@ -45,6 +45,8 @@ npm run dev
 4. **金额是 JSON number，时间是无时区字符串**。格式化一律走 `utils/money.ts` 与 `utils/datetime.ts`，不要 `new Date()` 或 `toFixed()`。
 5. **一级对象（订单 / 举报 / 申诉）用独立路由页**，附属对象（钱包、治理摘要、审计长文本）用抽屉。
 6. 字典与文案集中在 `src/constants/options.ts`，用 `satisfies Record<Enum, ...>` 保证枚举漏项时编译失败。
+7. **三态固定**：加载走骨架、空态走 `EmptyState`（翻过头 / 筛不到 / 平台无数据三分支）、失败走 `ErrorState`（可重试）。**后端不可用时绝不渲染成 0 或空表**。
+8. 样式按页拆文件（`funds.css` / `audit.css` …），公共块只放 `layout.css` 与 `data.css`；新增页面样式记得在 `styles/index.css` 里 `@import`。
 
 ## 目录
 
@@ -60,7 +62,7 @@ src/
 ├─ composables/  usePagedQuery / useRouteFilters / useConfirm / useAsyncAction / useEChart
 ├─ views/        登录、仪表盘、订单、申诉、举报、用户、资金、审计、错误页
 ├─ utils/        money / datetime / errors / query / session / echarts
-└─ styles/       tokens（设计令牌）、element（EP 主题覆盖）、layout（布局与组件样式）
+└─ styles/       tokens（令牌）、element（EP 覆盖）、layout / data（公共）、按页样式（dashboard / reports / appeals / users / funds / audit）
 ```
 
 ## 交付进度
@@ -70,9 +72,28 @@ src/
 - [x] **M2** 仪表盘（KPI + 图表）
 - [x] **M3** 举报
 - [x] **M4** 申诉
-- [ ] M5 用户
-- [ ] M6 资金
-- [ ] M7 审计
-- [ ] M8 收口
+- [x] **M5** 用户
+- [x] **M6** 资金
+- [x] **M7** 审计
+- [x] **M8** 收口（三态巡检 / 并发 401 / 404 入布局 / 体积基线 / 覆盖对照表）
 
-详细验收清单见 `../../管理端前端开发计划书.md`。
+## 构建基线
+
+`npm run build` 于 2026-11-19 实测，产物 `dist/` 共 46 个文件（35 JS + 11 CSS），未压缩合计 1.41 MB。
+
+| 产物 | 原始 | gzip | 说明 |
+|---|---|---|---|
+| `index-*.js`（入口 + 公共依赖） | 228 KB | 85 KB | 所有页面共用，含 Vue / Router / Pinia / axios |
+| `index-*.css` | 91 KB | 14 KB | 设计令牌 + 布局 + 各页样式 |
+| `vendor-echarts-*.js` | 501 KB | 169 KB | **仅仪表盘按需加载**，其他页不下载 |
+| `el-table-column-*.js` | 133 KB | 46 KB | Element Plus 表格，列表页共用 |
+| `el-date-picker-*.js` | 105 KB | 29 KB | 有日期筛选的页面才加载 |
+| 各页面 chunk | 9–23 KB | 4–9 KB | 按路由懒加载，单页约 5 KB gzip |
+| **JS + CSS 合计** | — | **465 KB** | gzip 后总量 |
+
+体积守卫：ECharts 通过 `manualChunks` 单独成 chunk，仪表盘自身 chunk 只有 8.8 KB；不引入全量 Element Plus，组件与样式按需。
+
+## 相关文档
+
+- 旧 `/admin` 功能点覆盖对照表：[`../docs/管理端前端-旧版功能覆盖对照表.md`](../docs/管理端前端-旧版功能覆盖对照表.md)
+- 接口契约以 `../campus-bounty-user-backend` 源码为准（`AdminController` 17 个 + `AdminAppealController` 3 个）

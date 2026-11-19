@@ -908,6 +908,18 @@ ul {
   color: var(--danger);
 }
 
+/* 会话失效提示：只在 401 跳转过来的那一次出现，不重复弹 toast */
+.login__notice {
+  margin-top: 14px;
+  padding: 9px 12px;
+  border: 1px solid #fde3c4;
+  border-radius: var(--radius-sm);
+  background: var(--warning-bg);
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: #b45309;
+}
+
 .login__hint {
   margin-top: 22px;
   padding: 12px 14px;
