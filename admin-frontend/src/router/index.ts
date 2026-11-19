@@ -26,6 +26,14 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '订单管理' },
       },
       {
+        // 详情独立成页而不是抽屉：订单详情有 7 块内容、还要能横向对比两张表，
+        // 塞进抽屉会变成一个内部滚动条套外部滚动条的烂摊子
+        path: 'orders/:id',
+        name: 'order-detail',
+        component: () => import('@/views/orders/OrderDetailView.vue'),
+        meta: { title: '订单详情' },
+      },
+      {
         path: 'appeals',
         name: 'appeals',
         component: () => import('@/views/appeals/AppealListView.vue'),

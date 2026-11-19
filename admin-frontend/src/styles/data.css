@@ -1,0 +1,456 @@
+/*
+ * 数据展示层：表格 / 详情页 / 时间线 / 双方卡片。
+ * 只在 M1 之后被业务页复用，改这里等于改七个页面的观感，改动要谨慎。
+ */
+
+/* ── 表格 ───────────────────────────────────────────────────────── */
+.data-table {
+  background: transparent;
+  --el-table-border-color: var(--line-soft);
+  --el-table-tr-bg-color: transparent;
+}
+
+.data-table .el-table__inner-wrapper::before,
+.data-table .el-table__border-left-patch {
+  display: none;
+}
+
+.data-table th.el-table__cell {
+  background: var(--table-head-bg);
+  color: var(--text-soft);
+  font-weight: 600;
+}
+
+.data-table td.el-table__cell {
+  padding: 9px 0;
+}
+
+.data-table .cell {
+  padding: 0 10px;
+}
+
+/*
+ * 关掉 el-table 自带的空态。
+ * QueryTable 会在表格下方渲染自己的空态（带插图 + 行动按钮），
+ * 不关的话页面会同时出现「No Data」和我们自己的空态，两套文案打架。
+ */
+.data-table .el-table__empty-block {
+  display: none;
+}
+
+/* 行可点进详情 */
+.order-table .el-table__row {
+  cursor: pointer;
+}
+
+.order-table__id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* ── 表单错误：就地红字，不用 toast ─────────────────────────────── */
+.form-error {
+  margin: -4px 0 12px;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--danger-bg);
+  border: 1px solid #fbdcdc;
+  color: var(--danger);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+/* ── 详情页 ─────────────────────────────────────────────────────── */
+.detail-skeleton {
+  padding: 24px 22px;
+}
+
+.detail-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 20px 22px;
+  margin-bottom: 16px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
+}
+
+.detail-hero__main {
+  min-width: 0;
+}
+
+.detail-hero__line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.detail-hero__id {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.detail-hero__title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-strong);
+  line-height: 1.45;
+  letter-spacing: -0.01em;
+  word-break: break-word;
+}
+
+.detail-hero__meta {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.7;
+}
+
+.detail-hero__dot {
+  margin: 0 6px;
+  color: #cbd5e1;
+}
+
+.detail-hero__amount {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex: 0 0 auto;
+  padding-left: 24px;
+  border-left: 1px solid var(--line-soft);
+}
+
+.detail-hero__amount-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.detail-hero__amount .money--strong {
+  font-size: 24px;
+  letter-spacing: -0.02em;
+}
+
+/* 两栏：主栏放明细，侧栏放双方与时间线 */
+.detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(300px, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.detail-grid__main,
+.detail-grid__side {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.detail-desc {
+  margin-top: 18px;
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+  background: var(--table-head-bg);
+  border: 1px solid var(--line-soft);
+  font-size: 13px;
+  line-height: 1.85;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.detail-empty {
+  padding: 18px 0 6px;
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* 图片 */
+.thumb-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.thumb-strip__item {
+  width: 92px;
+  height: 92px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  overflow: hidden;
+  cursor: zoom-in;
+  background: var(--table-head-bg);
+}
+
+/* ── 交易双方 ───────────────────────────────────────────────────── */
+.party-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.party {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--table-head-bg);
+}
+
+.party__body {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+}
+
+.party__body--empty {
+  justify-content: center;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.party__avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--brand-50);
+  border: 1px solid var(--brand-100);
+  color: var(--brand-600);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.party__info {
+  min-width: 0;
+}
+
+.party__name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-strong);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.party__account {
+  margin-top: 2px;
+  color: var(--text-muted);
+}
+
+.party__foot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+}
+
+.party__role {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.party__time {
+  /* 注册时间靠右，窄卡片下自动换行，绝不撑破卡片 */
+  margin-left: auto;
+  font-size: 12px;
+}
+
+/* ── 时间线 ─────────────────────────────────────────────────────── */
+.timeline {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.timeline__item {
+  position: relative;
+  display: flex;
+  gap: 12px;
+  padding-bottom: 18px;
+}
+
+/* 竖线：用伪元素画在圆点下方，最后一项不画 */
+.timeline__item::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 14px;
+  bottom: 0;
+  width: 1px;
+  background: var(--line);
+}
+
+.timeline__item.is-last {
+  padding-bottom: 0;
+}
+
+.timeline__item.is-last::before {
+  display: none;
+}
+
+.timeline__dot {
+  position: relative;
+  z-index: 1;
+  width: 9px;
+  height: 9px;
+  margin-top: 5px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--muted);
+}
+
+.timeline__dot--primary {
+  border-color: var(--brand-500);
+}
+.timeline__dot--success {
+  border-color: var(--success);
+}
+.timeline__dot--warning {
+  border-color: var(--warning);
+}
+.timeline__dot--danger {
+  border-color: var(--danger);
+}
+.timeline__dot--info {
+  border-color: var(--info);
+}
+
+.timeline__body {
+  min-width: 0;
+  flex: 1;
+}
+
+.timeline__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.timeline__time {
+  font-size: 12px;
+}
+
+.timeline__detail {
+  margin-top: 5px;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.timeline__actor {
+  margin-top: 4px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+/* ── 申诉卡 ─────────────────────────────────────────────────────── */
+.appeal-card {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: #fff;
+}
+
+.appeal-card__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.appeal-card__time {
+  margin-left: auto;
+  font-size: 12px;
+}
+
+.appeal-card__reason {
+  margin-top: 10px;
+  font-size: 13px;
+  line-height: 1.75;
+  color: var(--text-strong);
+  word-break: break-word;
+}
+
+.appeal-card__meta {
+  display: grid;
+  /* 固定两列：auto-fit 在窄卡片里会排成 3+1，第二行只剩一项很难读 */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 16px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line);
+}
+
+.appeal-card__meta dt {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-bottom: 3px;
+}
+
+.appeal-card__meta dd {
+  font-size: 13px;
+  color: var(--text-strong);
+}
+
+.appeal-card__comment {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--brand-50);
+  border: 1px solid #dbe7fd;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--brand-700);
+  word-break: break-word;
+}
+
+.appeal-card__comment-label {
+  display: inline-block;
+  margin-right: 8px;
+  font-weight: 600;
+}
+
+/* ── 响应式 ─────────────────────────────────────────────────────── */
+@media (max-width: 1180px) {
+  .detail-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .detail-hero {
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .detail-hero__amount {
+    align-items: flex-start;
+    padding-left: 0;
+    border-left: 0;
+    padding-top: 14px;
+    border-top: 1px solid var(--line-soft);
+    width: 100%;
+  }
+}
+
+/* 筛选栏里日期区间需要更宽 */
+.filter-field--wide {
+  grid-column: span 2;
+}

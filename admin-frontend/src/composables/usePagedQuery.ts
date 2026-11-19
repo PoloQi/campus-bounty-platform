@@ -1,4 +1,12 @@
-import { computed, ref, shallowRef, type ComputedRef, type Ref, type ShallowRef } from 'vue'
+import {
+  computed,
+  onBeforeUnmount,
+  ref,
+  shallowRef,
+  type ComputedRef,
+  type Ref,
+  type ShallowRef,
+} from 'vue'
 import type { Paged, PageQuery } from '@/types/api'
 import type { AppError } from '@/utils/errors'
 import { toAppError } from '@/utils/errors'
@@ -73,6 +81,8 @@ export function usePagedQuery<T, Q extends Record<string, unknown>>(
     if (target < 0 || target === page.value) return
     await load(target)
   }
+
+  onBeforeUnmount(() => controller?.abort())
 
   return {
     items,
