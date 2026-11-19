@@ -7,6 +7,7 @@ import type { AppealPageRaw, BackendPage, Paged } from '@/types/api'
 import type {
   Appeal,
   ArbitrationBody,
+  AuditRow,
   Dashboard,
   FundTotals,
   HandleReportBody,
@@ -18,7 +19,14 @@ import type {
   Wallet,
   WalletLog,
 } from '@/types/domain'
-import type { AppealQuery, LedgerQuery, OrderQuery, ReportQuery, UserQuery } from '@/types/query'
+import type {
+  AppealQuery,
+  AuditQuery,
+  LedgerQuery,
+  OrderQuery,
+  ReportQuery,
+  UserQuery,
+} from '@/types/query'
 import type { ReportTargetType } from '@/types/enums'
 
 /**
@@ -205,4 +213,27 @@ export async function fetchAppeal(id: number, signal?: AbortSignal): Promise<App
  */
 export async function arbitrateAppeal(id: number, body: ArbitrationBody): Promise<Appeal> {
   return http.post<Appeal>(`/api/admin/appeals/${id}/arbitrate`, body)
+}
+
+/* ───────────────────────── 审计日志 ───────────────────────── */
+
+/**
+ * GET /api/admin/audit
+ *
+ * 只有四个筛选条件，且都是精确匹配：
+ *   - adminId：审计表只落 admin_id，没有冗余操作人名字，所以前端也只能按编号查；
+ *   - action：审计动作，传枚举外的值不报错，安静返回空列表；
+ *   - from / through：按 created_at 卡日期（含首尾两天），through 早于 from 时后端报 40000。
+ *
+ * 排序固定 id desc（最新在前）。分页结构与订单/举报/用户一致：{items, page, hasNext}。
+ *
+ * 两条容易误读的语义，页面必须说明，否则会被当成「日志丢数据」：
+ *   1. 只有写操作才留痕（删帖、下架交易帖、封禁、解封、处置举报、申诉裁决），
+ *      登录与查看不留痕；
+ *   2. 审计写入与业务在同一个事务里（propagation = MANDATORY），操作失败会一起回滚，
+ *      所以「有记录」即代表「当时执行成功」，不存在失败记录。
+ */
+export async function fetchAudit(query: AuditQuery, signal?: AbortSignal): Promise<Paged<AuditRow>> {
+  const raw = await http.get<BackendPage<AuditRow>>('/api/admin/audit', query, { signal })
+  return toPaged(raw)
 }

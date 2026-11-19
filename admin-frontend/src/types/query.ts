@@ -68,3 +68,16 @@ export interface LedgerFilters extends Record<string, string> {
 }
 
 export type LedgerQuery = LedgerFilters & PageQuery
+
+export interface AuditFilters extends Record<string, string> {
+  /** 管理员用户 ID，精确匹配；审计表只存 admin_id，没有操作人名字 */
+  adminId: string
+  /** AuditAction，精确匹配；传枚举外的值不报错，只会安静返回空列表 */
+  action: string
+  /** yyyy-MM-dd */
+  from: string
+  /** yyyy-MM-dd */
+  through: string
+}
+
+export type AuditQuery = AuditFilters & PageQuery

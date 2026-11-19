@@ -171,12 +171,7 @@
 }
 
 /* ── 流水区 ─────────────────────────────────────────────────────── */
-/* filter-bar 下面紧跟错误条：data.css 的 form-error 是为详情表单写的
-   （margin-top 是负值），放进列表流里会贴到筛选栏上 */
-.form-error--bar {
-  margin: 10px 0 0;
-}
-
+/* .form-error--bar 已上移到 data.css（M7 审计页也要用） */
 .ledger-note {
   margin: 12px 0 12px;
   padding: 10px 13px;
