@@ -8,14 +8,17 @@ import type {
   Appeal,
   ArbitrationBody,
   Dashboard,
+  FundTotals,
   HandleReportBody,
   ModerationTarget,
   OrderDetail,
   OrderRow,
   ReportRow,
   UserRow,
+  Wallet,
+  WalletLog,
 } from '@/types/domain'
-import type { AppealQuery, OrderQuery, ReportQuery, UserQuery } from '@/types/query'
+import type { AppealQuery, LedgerQuery, OrderQuery, ReportQuery, UserQuery } from '@/types/query'
 import type { ReportTargetType } from '@/types/enums'
 
 /**
@@ -126,6 +129,37 @@ export async function fetchUsers(query: UserQuery, signal?: AbortSignal): Promis
  */
 export async function unbanUser(id: number): Promise<void> {
   await http.post<void>(`/api/admin/users/${id}/unban`)
+}
+
+/* ───────────────────────── 资金监管 ───────────────────────── */
+
+/**
+ * GET /api/admin/funds —— 托管资金核对
+ *
+ * frozen     = 所有钱包 frozen 之和
+ * expected   = 状态在「待接单 / 进行中 / 待确认 / 纠纷中」的订单金额之和
+ * difference = frozen - expected，正常应为 0
+ *
+ * 后端不做任何修正，只是把两个数摆出来；差额的解读放在页面上。
+ */
+export async function fetchFunds(signal?: AbortSignal): Promise<FundTotals> {
+  return http.get<FundTotals>('/api/admin/funds', undefined, { signal })
+}
+
+/**
+ * GET /api/admin/funds/wallets/{userId}
+ *
+ * 后端是 findByUserId(...).orElse(null) —— 用户不存在与用户没钱包都返回 data:null，
+ * 且都是 code=0。所以调用方拿到 null 时不能断言「用户不存在」。
+ */
+export async function fetchWallet(userId: number, signal?: AbortSignal): Promise<Wallet | null> {
+  return http.get<Wallet | null>(`/api/admin/funds/wallets/${userId}`, undefined, { signal })
+}
+
+/** GET /api/admin/funds/ledger —— 流水按 id desc，白名单内的类型才可筛 */
+export async function fetchLedger(query: LedgerQuery, signal?: AbortSignal): Promise<Paged<WalletLog>> {
+  const raw = await http.get<BackendPage<WalletLog>>('/api/admin/funds/ledger', query, { signal })
+  return toPaged(raw)
 }
 
 /* ───────────────────────── 申诉仲裁 ───────────────────────── */

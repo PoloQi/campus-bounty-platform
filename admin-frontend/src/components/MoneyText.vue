@@ -16,6 +16,11 @@ const props = withDefaults(
 )
 
 const negative = computed(() => isNegative(props.value))
+/**
+ * 只有「带符号的流水金额」才给正数上绿色。
+ * 余额、托管额这类普通金额永远是中性色 —— 余额高不代表「收入」。
+ */
+const positive = computed(() => props.signed && typeof props.value === 'number' && props.value > 0)
 const text = computed(() => {
   if (props.value == null) return props.placeholder
   return props.signed ? formatSignedMoney(props.value) : formatMoney(props.value)
@@ -23,5 +28,9 @@ const text = computed(() => {
 </script>
 
 <template>
-  <span class="money" :class="{ 'money--negative': negative, 'money--strong': strong }">{{ text }}</span>
+  <span
+    class="money"
+    :class="{ 'money--negative': negative, 'money--positive': positive, 'money--strong': strong }"
+    >{{ text }}</span
+  >
 </template>

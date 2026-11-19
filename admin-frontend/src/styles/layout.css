@@ -526,6 +526,11 @@ ul {
   color: var(--danger);
 }
 
+/* 流水里的进账用绿色，与支出的红色形成对照；普通金额不加（余额高不等于收入） */
+.money--positive {
+  color: var(--success);
+}
+
 .money--strong {
   font-weight: 600;
   font-size: 15px;

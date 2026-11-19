@@ -53,3 +53,18 @@ export interface UserFilters extends Record<string, string> {
 }
 
 export type UserQuery = UserFilters & PageQuery
+
+export interface LedgerFilters extends Record<string, string> {
+  /** 用户 ID，精确匹配；空串表示全部用户 */
+  userId: string
+  /** WalletLogType，空串表示全部类型 */
+  type: string
+  /** 关联订单 ID，精确匹配；不传则不限订单 */
+  orderId: string
+  /** yyyy-MM-dd */
+  from: string
+  /** yyyy-MM-dd */
+  through: string
+}
+
+export type LedgerQuery = LedgerFilters & PageQuery
