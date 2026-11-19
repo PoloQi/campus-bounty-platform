@@ -33,3 +33,10 @@ export interface ReportFilters extends Record<string, string> {
 }
 
 export type ReportQuery = ReportFilters & PageQuery
+
+export interface AppealFilters extends Record<string, string> {
+  /** AppealStatus OPEN/RESOLVED/WITHDRAWN，空串表示全部 */
+  status: string
+}
+
+export type AppealQuery = AppealFilters & PageQuery

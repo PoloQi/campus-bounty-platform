@@ -1,0 +1,202 @@
+/**
+ * 申诉仲裁页（列表 + 详情）。
+ * 只放申诉特有的块：裁决结果槽、理由块、订单证据卡、裁决意见引用。
+ * 通用的面板 / 键值表 / 两栏 / 裁决二选一 / 表单字段在
+ * layout.css、data.css、reports.css 里，这里不重复定义。
+ */
+
+/* ── 详情页顶部：裁决结果槽 ─────────────────────────────────────── */
+/* 结构与举报页的 .report-hero__verdict 一致，用独立类名是为了
+   两页的窄屏折行点可以各自调整，不互相牵连 */
+.appeal-hero__verdict {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex: 0 0 auto;
+  max-width: 260px;
+  padding-left: 24px;
+  border-left: 1px solid var(--line-soft);
+}
+
+.appeal-hero__verdict-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.appeal-hero__verdict-value {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-strong);
+  text-align: right;
+  line-height: 1.5;
+}
+
+.appeal-hero__verdict.is-pending .appeal-hero__verdict-value {
+  color: var(--warning);
+}
+
+.appeal-hero__verdict-time {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ── 申诉理由 ───────────────────────────────────────────────────── */
+/* 学生填的原文，最多 500 字。保留换行，长串（订单号、链接）强制断行，
+   否则会把 .detail-grid__main 撑出横向滚动条 */
+.appeal-reason {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+  background: var(--table-head-bg);
+  border: 1px solid var(--line-soft);
+  font-size: 13.5px;
+  line-height: 1.85;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ── 订单证据卡 ─────────────────────────────────────────────────── */
+.appeal-order {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: #fbfcff;
+}
+
+.appeal-order__amount {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 0 0 auto;
+  padding-right: 20px;
+  border-right: 1px solid var(--line-soft);
+}
+
+.appeal-order__amount-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.appeal-order__amount .money--strong {
+  font-size: 20px;
+  letter-spacing: -0.02em;
+}
+
+.appeal-order__info {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.appeal-order__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-strong);
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.appeal-order__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+/* 订单读不到时的警告块：与举报页的治理对象缺失保持同一视觉语言 */
+.appeal-order-missing {
+  display: flex;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+  background: var(--warning-bg);
+  border: 1px solid #fde3c8;
+}
+
+.appeal-order-missing__icon {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  font-size: 18px;
+  color: var(--warning);
+}
+
+.appeal-order-missing__title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #b45309;
+}
+
+.appeal-order-missing__text {
+  margin-top: 4px;
+  font-size: 12.5px;
+  line-height: 1.75;
+  color: #92400e;
+}
+
+/* ── 裁决意见引用块 ─────────────────────────────────────────────── */
+.appeal-comment {
+  margin-top: 16px;
+  padding: 12px 14px 12px 16px;
+  border-left: 3px solid var(--brand-400);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--brand-50);
+  font-size: 13px;
+  line-height: 1.8;
+  color: #1e3a8a;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ── 裁决二选一的选中态配色 ─────────────────────────────────────── */
+/* .verdict__card 本体在 reports.css（举报裁决先用），这里只补申诉的两个语义：
+   打款是「把钱给出去」的中性结算（沿用默认蓝），退款是「保障买家」的警示色 */
+.verdict__card--refund.is-active {
+  border-color: var(--warning);
+  background: var(--warning-bg);
+  box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.1);
+}
+
+.verdict__card--refund.is-active .verdict__label {
+  color: #b45309;
+}
+
+@media (max-width: 1180px) {
+  .appeal-hero__verdict {
+    align-items: flex-start;
+    max-width: none;
+    width: 100%;
+    padding-left: 0;
+    padding-top: 14px;
+    border-left: 0;
+    border-top: 1px solid var(--line-soft);
+  }
+
+  .appeal-hero__verdict-value {
+    text-align: left;
+  }
+}
+
+@media (max-width: 900px) {
+  /* 订单证据卡在窄屏改为纵向：金额块的下边框替代右竖线，
+     否则会剩一条悬空的竖线贴在文字左侧 */
+  .appeal-order {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .appeal-order__amount {
+    width: 100%;
+    padding-right: 0;
+    padding-bottom: 10px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+}

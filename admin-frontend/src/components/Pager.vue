@@ -18,10 +18,17 @@ const emit = defineEmits<{ change: [page: number] }>()
 /**
  * 后端列表接口没有 total，只有 hasNext，所以不用 el-pagination：
  * 伪造 total 会让跳页错乱，还会诱导显示「共 N 条」这种后端并不存在的数字。
+ *
+ * 申诉接口虽然有 totalPages，但有两个坑：
+ *   - 空结果时 totalPages = 0，不能显示「第 1 / 0 页」；
+ *   - page 越界时后端不夹取（page=99 会原样回 99），所以不能写死「x / y」。
  */
 const label = computed(() => {
-  if (props.totalPages && props.totalPages > 0) {
-    return `第 ${props.page + 1} / ${props.totalPages} 页`
+  const total = props.totalPages
+  if (total && total > 0) {
+    return props.page + 1 <= total
+      ? `第 ${props.page + 1} / ${total} 页`
+      : `第 ${props.page + 1} 页 · 共 ${total} 页`
   }
   return `第 ${props.page + 1} 页`
 })

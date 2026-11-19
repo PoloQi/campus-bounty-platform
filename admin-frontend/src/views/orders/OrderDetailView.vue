@@ -60,6 +60,11 @@ function backToList(): void {
   else void router.push({ name: 'orders' })
 }
 
+/** 纠纷单在列表里能看到 openAppealId，这里顺手打通到裁决页，省得再回申诉列表找 */
+function goAppeal(id: number): void {
+  void router.push({ name: 'appeal-detail', params: { id: String(id) } })
+}
+
 onMounted(() => {
   // 非法 id 也走 load：fetcher 直接 reject 成失败态，比留空白页好排查
   void load()
@@ -213,6 +218,16 @@ onMounted(() => {
                   <StatusTag kind="appealStatus" :value="appeal.status" />
                   <StatusTag v-if="appeal.outcome" kind="appealOutcome" :value="appeal.outcome" />
                   <TimeText class="appeal-card__time" :value="appeal.createdAt" />
+                  <el-button
+                    v-if="appeal.status === 'OPEN'"
+                    link
+                    type="primary"
+                    size="small"
+                    class="appeal-card__action"
+                    @click="goAppeal(appeal.id)"
+                  >
+                    去裁决
+                  </el-button>
                 </header>
                 <p class="appeal-card__reason">{{ appeal.reason }}</p>
                 <dl class="appeal-card__meta">

@@ -382,6 +382,14 @@
   font-size: 12px;
 }
 
+/* head 里 time 已 margin-left:auto，按钮跟在时间后面即可；
+   el-button link + small 仍带固定高度，压掉才能和时间基线对齐 */
+.appeal-card__action {
+  height: auto;
+  padding: 0;
+  font-size: 12px;
+}
+
 .appeal-card__reason {
   margin-top: 10px;
   font-size: 13px;

@@ -40,6 +40,13 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '申诉仲裁' },
       },
       {
+        // 裁决要同时看申诉理由、托管金额与资金流水，塞进弹窗看不全
+        path: 'appeals/:id',
+        name: 'appeal-detail',
+        component: () => import('@/views/appeals/AppealDetailView.vue'),
+        meta: { title: '申诉详情' },
+      },
+      {
         path: 'reports',
         name: 'reports',
         component: () => import('@/views/reports/ReportListView.vue'),

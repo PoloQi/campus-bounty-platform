@@ -394,6 +394,19 @@ ul {
   min-width: 0;
 }
 
+/* 字段少的时候 auto-fit 会把单个下拉拉到整行宽（申诉页只有 1 个条件时是 966px），
+   看起来像个没填完的输入框。给列宽设上限，字段少就靠左排列。
+   订单页 6 个字段每列约 190px，低于该上限，不受影响。 */
+.filter-bar__fields > .filter-field {
+  max-width: 280px;
+}
+
+/* 日期区间本来就跨两列（grid-column: span 2），宽度交给跨列决定。
+   这里必须显式放开，否则会被上面那条压成 280，两个日期框会很挤。 */
+.filter-bar__fields > .filter-field--wide {
+  max-width: none;
+}
+
 .filter-field > label {
   font-size: 12px;
   color: var(--text-muted);
@@ -980,6 +993,28 @@ ul {
   line-height: 1.8;
   max-width: 52ch;
   text-wrap: pretty;
+}
+
+/* 表格/键值里当链接用的裸按钮：语义上是按钮（触发跳转或动作），
+   视觉上是链接，所以不能用 <a> 冒充，也不能继承按钮的默认外观 */
+.link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--brand-600);
+  cursor: pointer;
+  text-underline-offset: 3px;
+}
+
+.link-button:hover {
+  text-decoration: underline;
+}
+
+.link-button:focus-visible {
+  outline: 2px solid var(--brand-400);
+  outline-offset: 2px;
+  border-radius: 3px;
 }
 
 /* ── 响应式 ─────────────────────────────────────────────────────── */
